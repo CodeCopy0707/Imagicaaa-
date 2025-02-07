@@ -1,29 +1,35 @@
-require("dotenv").config();
 const { Telegraf } = require("telegraf");
 const axios = require("axios");
+require("dotenv").config();
 
-const bot = new Telegraf(process.env.BOT_TOKEN);
+// Replace with your Telegram Bot Token
+const BOT_TOKEN = "7813374449:AAENBb8BN8_oD2QOSP31tKO6WjpS4f0Dt4g";
+const HF_API_KEY = "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"; // Hugging Face API Key
 
-bot.start((ctx) => {
-    ctx.reply("👋 Welcome! Send me a text prompt to generate an AI image.");
-});
+const bot = new Telegraf(BOT_TOKEN);
+
+bot.start((ctx) => ctx.reply("🤖 Welcome! Send me a prompt, and I'll generate an AI image for you."));
 
 bot.on("text", async (ctx) => {
     const prompt = ctx.message.text;
-    ctx.reply("⏳ Generating your AI image...");
+    ctx.reply("⏳ Generating AI image... Please wait!");
 
     try {
-        const response = await axios.get(`https://lexica.art/api/v1/search?q=${encodeURIComponent(prompt)}`);
-        
-        if (response.data && response.data.images && response.data.images.length > 0) {
-            const imageUrl = response.data.images[0].src;
-            ctx.replyWithPhoto({ url: imageUrl });
-        } else {
-            ctx.reply("❌ No image found! Try a different prompt.");
-        }
+        const response = await axios.post(
+            "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-2",
+            { inputs: prompt },
+            {
+                headers: {
+                    Authorization: `Bearer ${HF_API_KEY}`,
+                },
+                responseType: "arraybuffer",
+            }
+        );
+
+        ctx.replyWithPhoto({ source: Buffer.from(response.data) });
     } catch (error) {
-        console.error("Error:", error);
-        ctx.reply("⚠️ AI image generation error. Please try later.");
+        console.error(error);
+        ctx.reply("❌ Failed to generate image. Try again later!");
     }
 });
 
