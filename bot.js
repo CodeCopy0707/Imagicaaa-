@@ -13,14 +13,13 @@ bot.on("text", async (ctx) => {
     ctx.reply("⏳ Generating your AI image...");
 
     try {
-        const response = await axios.get(
-            `https://pixray.gob.io/api?prompt=${encodeURIComponent(prompt)}`
-        );
-
-        if (response.data && response.data.image) {
-            ctx.replyWithPhoto({ url: response.data.image });
+        const response = await axios.get(`https://lexica.art/api/v1/search?q=${encodeURIComponent(prompt)}`);
+        
+        if (response.data && response.data.images && response.data.images.length > 0) {
+            const imageUrl = response.data.images[0].src;
+            ctx.replyWithPhoto({ url: imageUrl });
         } else {
-            ctx.reply("❌ Image generation failed, try again!");
+            ctx.reply("❌ No image found! Try a different prompt.");
         }
     } catch (error) {
         console.error("Error:", error);
