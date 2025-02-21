@@ -1,9 +1,12 @@
-const TelegramBot = require("node-telegram-bot-api");
-const axios = require("axios");
-const fs = require("fs");
+import TelegramBot from "node-telegram-bot-api";
+import axios from "axios";
+import fs from "fs";
+import dotenv from "dotenv";
 
-TELEGRAM_BOT_TOKEN='7813374449:AAENBb8BN8_oD2QOSP31tKO6WjpS4f0Dt4g';
-HF_API_KEY='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';
+dotenv.config();
+
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const HF_API_KEY = process.env.HF_API_KEY;
 
 const bot = new TelegramBot(TELEGRAM_BOT_TOKEN, { polling: true });
 
