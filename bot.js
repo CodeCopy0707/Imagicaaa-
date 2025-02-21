@@ -1,6 +1,6 @@
-const TelegramBot = require('node-telegram-bot-api');
-const axios = require('axios');
-const fs = require('fs');
+import TelegramBot from 'node-telegram-bot-api';
+import axios from 'axios';
+import fs from 'fs';
 
 // Replace with your actual tokens
 const TELEGRAM_BOT_TOKEN = '7813374449:AAENBb8BN8_oD2QOSP31tKO6WjpS4f0Dt4g';
