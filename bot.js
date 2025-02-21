@@ -11,7 +11,7 @@ const HF_API_KEY = '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'
 const bot = new Telegraf(BOT_TOKEN);
 
 // Hugging Face API URL
-const HF_API_URL = "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-dev";
+const HF_API_URL = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0";
 
 // Function to generate image with error handling and logging
 async function generateImage(prompt) {
