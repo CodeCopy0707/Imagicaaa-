@@ -1,284 +1,158 @@
 import { Telegraf } from "telegraf";
 import fetch from "node-fetch";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import dotenv from "dotenv";
 
-// API Keys (Directly Added - Not Recommended for Production)
-const TELEGRAM_BOT_TOKEN = "7813374449:AAENBb8BN8_oD2QOSP31tKO6WjpS4f0Dt4g";
-const HF_API_KEY = "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"; 
-const GEMINI_API_KEY = "AIzaSyDc7u7wTVdDG3zP18xnELKs0HX7-hImkmc";
+// Load environment variables
+dotenv.config();
 
+// Secure API Keys
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const HF_API_KEY = process.env.HF_API_KEY;
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const PING_URL = process.env.PING_URL;
+
+// Initialize AI
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
-// In-memory storage instead of Redis
+// In-memory session storage
 const userSessions = new Map();
 const imageHistory = new Map();
 
-// Keep bot active by pinging every 30 seconds
-const keepAlive = () => {
-  setInterval(() => {
-    fetch("https://imagicaaa-1.onrender.com").catch(console.error);
-  }, 30000);
-};
-
-// Start keepAlive immediately
-keepAlive();
-
-// Additional ping to another URL as backup
+// Keep bot active by pinging every 5 minutes
 setInterval(() => {
-  fetch("https://imagicaaa-1.onrender.com").catch(console.error);
-}, 30000);
+  if (PING_URL) fetch(PING_URL).catch(console.error);
+}, 300000);
 
-// Ping multiple endpoints to ensure uptime
-const pingEndpoints = [
-  "https://imagicaaa-1.onrender.com",
-];
-
-setInterval(() => {
-  pingEndpoints.forEach(endpoint => {
-    fetch(endpoint).catch(console.error);
-  });
-}, 30000);
-
-const updateActivity = (userId) => {
-  userSessions.set(userId, {
-    ...userSessions.get(userId),
-    lastActive: Date.now()
-  });
-};
-
-const checkInactivity = (userId) => {
-  const session = userSessions.get(userId);
-  if (!session) return true;
-  
-  const inactiveTime = Date.now() - session.lastActive;
-  return inactiveTime > 30 * 60; // 30 minutes
-};
-
+// Bot initialization
 const bot = new Telegraf(TELEGRAM_BOT_TOKEN);
 
-// Enhanced welcome message
+// Function to update user activity
+const updateActivity = (userId) => {
+  userSessions.set(userId, { lastActive: Date.now() });
+};
+
+// Function to check inactivity
+const checkInactivity = (userId) => {
+  const session = userSessions.get(userId);
+  return !session || Date.now() - session.lastActive > 30 * 60 * 1000; // 30 min
+};
+
+// Welcome message
 bot.start((ctx) => {
   const userId = ctx.from.id;
   updateActivity(userId);
-  ctx.reply("🎨 Welcome to the Advanced AI Image Generator! 🚀\n\n" +
-    "Here's what I can do:\n\n" +
-    "🖼 Generate high-quality images from descriptions\n" +
-    "🔄 Create multiple artistic variations\n" +
-    "💡 Provide creative suggestions\n" +
-    "🎯 Fine-tune image parameters\n" +
-    "📊 Track your generation history\n" +
-    "🔍 Advanced style controls\n\n" +
+  ctx.reply(
+    "🎨 Welcome to AI Image Generator!\n\n" +
     "Commands:\n" +
-    "/generate - Start image generation\n" +
+    "/generate - Create AI images\n" +
     "/styles - View available styles\n" +
-    "/history - View your recent generations\n" +
-    "/help - Get detailed help\n\n" +
-    "Send a description to begin creating!");
+    "/history - View your images\n" +
+    "/help - Get detailed help"
+  );
 });
 
-// Enhanced help command with Gemini
-bot.command('help', async (ctx) => {
-  const userId = ctx.from.id;
-  updateActivity(userId);
-  
-  const model = genAI.getGenerativeModel({ model: "gemini-pro"});
-  const prompt = "You are an advanced AI image generation assistant. Provide a detailed guide about your capabilities including: image generation, style control, variations, best practices for prompts, and advanced features. Make it engaging and informative.";
-  
+// Help command
+bot.command("help", async (ctx) => {
+  updateActivity(ctx.from.id);
   try {
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    ctx.reply(response.text());
+    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+    const result = await model.generateContent("Explain AI image generation features.");
+    ctx.reply(result.response.text());
   } catch (error) {
-    ctx.reply("Need help? Here's a quick guide:\n\n" +
-      "1. Write detailed descriptions\n" +
-      "2. Specify art style if desired\n" +
-      "3. Use /styles to see style options\n" +
-      "4. Generate variations of results\n" +
-      "5. Save favorites to history");
+    ctx.reply("Here’s a guide:\n1. Describe your idea.\n2. Use styles (/styles).\n3. Generate unique images!");
   }
 });
 
-// New styles command
-bot.command('styles', (ctx) => {
-  ctx.reply("Available Styles 🎨\n\n" +
-    "• Photorealistic\n" +
-    "• Digital Art\n" +
-    "• Oil Painting\n" +
-    "• Watercolor\n" +
-    "• Anime\n" +
-    "• 3D Render\n" +
-    "• Sketch\n" +
-    "• Pop Art\n\n" +
-    "Add style to your prompt like:\n" +
-    "'mountain landscape in watercolor style'");
+// Styles command
+bot.command("styles", (ctx) => {
+  ctx.reply("🎨 Available Styles:\n- Photorealistic\n- Digital Art\n- Anime\n- Sketch\n\nUse: 'A mountain in anime style'");
 });
 
-// Enhanced image generation
+// Image generation command
 bot.on("text", async (ctx) => {
   const userId = ctx.from.id;
   const prompt = ctx.message.text;
-  
-  if (await checkInactivity(userId)) {
-    ctx.reply("Welcome back! Starting new session.");
-  }
-  
+
+  if (checkInactivity(userId)) ctx.reply("Welcome back! Starting new session.");
   updateActivity(userId);
 
-  const negativePrompt = "low quality, blurry, distorted, ugly, bad anatomy";
-  const quality = "premium";
-
-  // Show processing message with style detection
-  const styleMatch = prompt.match(/in (\w+) style/i);
-  const detectedStyle = styleMatch ? styleMatch[1] : "default";
-  
-  await ctx.reply(`🎨 Processing your request...\n\nPrompt: ${prompt}\nStyle: ${detectedStyle}\nQuality: Premium\n\nPlease wait while I create your masterpiece!`);
+  const detectedStyle = (prompt.match(/in (\w+) style/i) || [])[1] || "default";
+  ctx.reply(`🎨 Generating...\nPrompt: ${prompt}\nStyle: ${detectedStyle}`);
 
   try {
     const response = await fetch("https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${HF_API_KEY}`,
-      },
-      body: JSON.stringify({
-        inputs: prompt,
-        parameters: {
-          negative_prompt: negativePrompt,
-          quality: "high",
-          guidance_scale: 7.5,
-          num_inference_steps: 50,
-        },
-      }),
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${HF_API_KEY}` },
+      body: JSON.stringify({ inputs: prompt, parameters: { guidance_scale: 7.5, num_inference_steps: 50 } }),
     });
 
-    if (!response.ok) throw new Error(`HTTP Error! Status: ${response.status}`);
+    if (!response.ok) throw new Error(`Error: ${response.status}`);
 
     const buffer = await response.arrayBuffer();
-    
-    // Store in memory
-    if (!imageHistory.has(userId)) {
-      imageHistory.set(userId, []);
-    }
-    const userHistory = imageHistory.get(userId);
-    userHistory.push({
-      prompt,
-      timestamp: Date.now(),
-      image: Buffer.from(buffer).toString('base64')
-    });
-    
-    // Keep only last 10 images
-    if (userHistory.length > 10) {
-      userHistory.shift();
-    }
+    const imageBuffer = Buffer.from(buffer);
 
-    // Enhanced response with more options
-    await ctx.replyWithPhoto(
-      { source: Buffer.from(buffer) },
-      {
-        caption: `🎨 Here's your creation!\n\nPrompt: "${prompt}"\nStyle: ${detectedStyle}\nQuality: Premium`,
-        reply_markup: {
-          inline_keyboard: [
-            [
-              { text: "🔄 Generate Variations", callback_data: "variations" },
-              { text: "💡 Get Ideas", callback_data: "ideas" }
-            ],
-            [
-              { text: "🎨 Change Style", callback_data: "style" },
-              { text: "⚙️ Advanced Settings", callback_data: "settings" }
-            ]
-          ]
-        }
-      }
-    );
+    if (!imageHistory.has(userId)) imageHistory.set(userId, []);
+    const userImages = imageHistory.get(userId);
+    userImages.push({ prompt, image: imageBuffer.toString("base64") });
 
+    if (userImages.length > 10) userImages.shift();
+
+    await ctx.replyWithPhoto({ source: imageBuffer }, { caption: `✨ Your AI Art:\nPrompt: "${prompt}"\nStyle: ${detectedStyle}` });
   } catch (error) {
     console.error(error);
-    ctx.reply("❌ Generation failed. Please try again or check your prompt.");
+    ctx.reply("❌ Failed to generate image. Try again.");
   }
 });
 
-// Enhanced variations with style control
-bot.action('variations', async (ctx) => {
+// Generate variations
+bot.action("variations", async (ctx) => {
   const userId = ctx.from.id;
   updateActivity(userId);
-
   const userHistory = imageHistory.get(userId);
   const lastImage = userHistory?.[userHistory.length - 1];
-  
-  if (!lastImage) {
-    return ctx.reply("No recent image found. Please generate an image first!");
-  }
 
-  ctx.reply("🎨 Creating artistic variations...\n\nGenerating 3 unique interpretations of your image!");
+  if (!lastImage) return ctx.reply("No recent image found.");
 
+  ctx.reply("🔄 Generating variations...");
   try {
     const variations = await Promise.all([
-      generateImage(`${lastImage.prompt} in a different artistic style, high quality`),
-      generateImage(`${lastImage.prompt} with dramatic lighting and composition`),
-      generateImage(`${lastImage.prompt} with alternative perspective and mood`)
+      generateImage(`${lastImage.prompt} with new artistic interpretation`),
+      generateImage(`${lastImage.prompt} with different color scheme`),
+      generateImage(`${lastImage.prompt} with enhanced details`)
     ]);
 
     for (const buffer of variations) {
       await ctx.replyWithPhoto({ source: buffer });
     }
-    
-    ctx.reply("✨ Here are your variations! Which one do you like best?");
   } catch (error) {
-    ctx.reply("Failed to generate variations. Please try again.");
+    ctx.reply("❌ Failed to generate variations.");
   }
 });
 
-// Enhanced idea generation
-bot.action('ideas', async (ctx) => {
-  const userId = ctx.from.id;
-  updateActivity(userId);
-
-  const userHistory = imageHistory.get(userId);
-  const lastImage = userHistory?.[userHistory.length - 1];
-  
-  if (!lastImage) {
-    return ctx.reply("No recent prompts found!");
-  }
-  
+// Fetch Gemini AI Suggestions
+bot.action("ideas", async (ctx) => {
+  updateActivity(ctx.from.id);
   try {
     const model = genAI.getGenerativeModel({ model: "gemini-pro" });
-    const result = await model.generateContent(
-      `As a creative AI art director, suggest 5 unique and detailed variations of this image prompt: "${lastImage.prompt}". Include specific style suggestions and artistic elements. Make them diverse and interesting.`
-    );
-    const response = await result.response;
-    ctx.reply("🎨 Creative Suggestions:\n\n" + response.text());
+    const result = await model.generateContent("Suggest creative AI-generated image ideas.");
+    ctx.reply(result.response.text());
   } catch (error) {
-    ctx.reply("Failed to generate ideas. Please try again.");
+    ctx.reply("❌ Failed to fetch ideas.");
   }
 });
 
+// Start bot
+bot.launch().then(() => console.log("🤖 Bot is running..."));
+
+// Generate Image Helper Function
 async function generateImage(prompt) {
   const response = await fetch("https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${HF_API_KEY}`,
-    },
-    body: JSON.stringify({
-      inputs: prompt,
-      parameters: {
-        negative_prompt: "low quality, blurry, distorted, ugly, bad anatomy",
-        quality: "high",
-        guidance_scale: 7.5,
-        num_inference_steps: 50,
-      },
-    }),
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${HF_API_KEY}` },
+    body: JSON.stringify({ inputs: prompt, parameters: { guidance_scale: 7.5, num_inference_steps: 50 } }),
   });
 
-  const buffer = await response.arrayBuffer();
-  return Buffer.from(buffer);
-}
-
-// Keep bot active on Render
-keepAlive();
-
-bot.launch().then(() => console.log("🚀 Advanced AI Image Generator is running..."));
-
-// Graceful shutdown
-process.once("SIGINT", () => bot.stop("SIGINT"));
-process.once("SIGTERM", () => bot.stop("SIGTERM"));
+  if (!response.ok) throw new Error(`Error: ${response.status}`);
+  return Buffer.from(await response.arrayBuffer());
+      }
