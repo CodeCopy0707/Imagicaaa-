@@ -3,6 +3,7 @@
   "version": "3.0.0",
   "description": "An AI-powered Telegram bot with Stable Diffusion XL & Gemini AI",
   "main": "bot.js",
+  "type": "module",
   "scripts": {
     "start": "node bot.js",
     "keep-alive": "node server.js"
