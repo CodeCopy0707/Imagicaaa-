@@ -347,10 +347,6 @@ bot.action(/.*/, async (ctx) => {
   }
 });
 
-// Start health checks
-const healthCheck = new HealthCheck();
-healthCheck.start();
-
 // Launch bot
 bot.launch()
   .then(() => console.log('🚀 Advanced Image Generator Bot is running...'))
@@ -359,4 +355,3 @@ bot.launch()
 // Enable graceful shutdown
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
-
