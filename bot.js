@@ -1,14 +1,3 @@
-
-
-const BOT_TOKEN = '7813374449:AAENBb8BN8_oD2QOSP31tKO6WjpS4f0Dt4g'
-const HF_API_KEY = '
-
-
-
-
-
-
-
 const express = require("express");
 const fetch = require("node-fetch");
 const { Telegraf } = require("telegraf");
