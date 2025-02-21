@@ -1,11 +1,20 @@
 import { Telegraf } from "telegraf";
 import fetch from "node-fetch";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import express from 'express';
 
 // API Keys from environment variables
 const TELEGRAM_BOT_TOKEN = "7813374449:AAENBb8BN8_oD2QOSP31tKO6WjpS4f0Dt4g";
 const HF_API_KEY = "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"; 
 const GEMINI_API_KEY = "AIzaSyDc7u7wTVdDG3zP18xnELKs0HX7-hImkmc";
+
+// Initialize Express app
+const app = express();
+const port = process.env.PORT || 3000;
+
+app.get('/', (req, res) => {
+  res.send('Bot is running!');
+});
 
 // Initialize AI models
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
@@ -347,11 +356,20 @@ bot.action(/.*/, async (ctx) => {
   }
 });
 
-// Launch bot
-bot.launch()
-  .then(() => console.log('🚀 Advanced Image Generator Bot is running...'))
-  .catch(error => console.error('Bot launch failed:', error));
+// Start Express server and launch bot
+app.listen(port, () => {
+  console.log(`Express server running on port ${port}`);
+  bot.launch()
+    .then(() => console.log('🚀 Advanced Image Generator Bot is running...'))
+    .catch(error => console.error('Bot launch failed:', error));
+});
 
 // Enable graceful shutdown
-process.once('SIGINT', () => bot.stop('SIGINT'));
-process.once('SIGTERM', () => bot.stop('SIGTERM'));
+process.once('SIGINT', () => {
+  bot.stop('SIGINT');
+  process.exit(0);
+});
+process.once('SIGTERM', () => {
+  bot.stop('SIGTERM'); 
+  process.exit(0);
+});
