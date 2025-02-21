@@ -1,37 +1,66 @@
+
+const express = require("express");
+const fetch = require("node-fetch");
 const { Telegraf } = require("telegraf");
-const axios = require("axios");
 require("dotenv").config();
 
-// Replace with your Telegram Bot Token
-const BOT_TOKEN = "7813374449:AAENBb8BN8_oD2QOSP31tKO6WjpS4f0Dt4g";
-const HF_API_KEY = "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"; // Hugging Face API Key
+const app = express();
+app.use(express.json());
 
+const BOT_TOKEN = '7813374449:AAENBb8BN8_oD2QOSP31tKO6WjpS4f0Dt4g';
+const HF_API_KEY = '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';
 const bot = new Telegraf(BOT_TOKEN);
 
-bot.start((ctx) => ctx.reply("🤖 Welcome! Send me a prompt, and I'll generate an AI image for you."));
+// Hugging Face API URL
+const HF_API_URL = "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-dev";
 
-bot.on("text", async (ctx) => {
-    const prompt = ctx.message.text;
-    ctx.reply("⏳ Generating AI image... Please wait!");
+// Function to generate image
+async function generateImage(prompt) {
+  try {
+    const response = await fetch(HF_API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${HF_API_KEY}`,
+      },
+      body: JSON.stringify({ inputs: prompt }),
+    });
 
-    try {
-        const response = await axios.post(
-            "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-2",
-            { inputs: prompt },
-            {
-                headers: {
-                    Authorization: `Bearer ${HF_API_KEY}`,
-                },
-                responseType: "arraybuffer",
-            }
-        );
+    if (!response.ok) throw new Error("Failed to generate image");
 
-        ctx.replyWithPhoto({ source: Buffer.from(response.data) });
-    } catch (error) {
-        console.error(error);
-        ctx.reply("❌ Failed to generate image. Try again later!");
-    }
+    const buffer = await response.buffer();
+    return buffer;
+  } catch (error) {
+    console.error("Error generating image:", error);
+    return null;
+  }
+}
+
+// **1️⃣ Web API Route**
+app.post("/generate", async (req, res) => {
+  const { prompt } = req.body;
+  if (!prompt) return res.status(400).json({ error: "Prompt is required" });
+
+  const image = await generateImage(prompt);
+  if (!image) return res.status(500).json({ error: "Image generation failed" });
+
+  res.setHeader("Content-Type", "image/png");
+  res.send(image);
 });
 
+// **2️⃣ Telegram Bot**
+bot.start((ctx) => ctx.reply("👋 Welcome! Send me a text prompt to generate an AI image."));
+bot.on("text", async (ctx) => {
+  const prompt = ctx.message.text;
+  ctx.reply("⏳ Generating your AI image...");
+
+  const image = await generateImage(prompt);
+  if (!image) return ctx.reply("❌ Failed to generate image.");
+
+  ctx.replyWithPhoto({ source: image });
+});
+
+// Start Express & Bot
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 bot.launch();
-console.log("🤖 Telegram Bot is running...");
