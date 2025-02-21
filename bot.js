@@ -1,53 +1,49 @@
-import { Telegraf } from "telegraf";
-import fetch from "node-fetch";
-import dotenv from "dotenv";
+require("dotenv").config();
+const TelegramBot = require("node-telegram-bot-api");
+const axios = require("axios");
+const fs = require("fs");
 
-dotenv.config();
-
-// Environment Variables (store API keys in .env file)
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const HF_API_KEY = process.env.HF_API_KEY;
 
-const bot = new Telegraf(TELEGRAM_BOT_TOKEN);
+const bot = new TelegramBot(TELEGRAM_BOT_TOKEN, { polling: true });
 
-bot.start((ctx) => {
-  ctx.reply("👋 Welcome! Send me a text prompt, and I'll generate an image for you using AI.");
+bot.onText(/\/start/, (msg) => {
+  bot.sendMessage(msg.chat.id, "Welcome! Send me an image, and I'll generate a variant.");
 });
 
-bot.on("text", async (ctx) => {
-  const prompt = ctx.message.text;
-  const negativePrompt = "low quality, blurry, distorted";
-  const quality = "premium"; // Change to "standard" for normal quality
-
-  ctx.reply("⏳ Generating your image... Please wait!");
+bot.on("photo", async (msg) => {
+  const chatId = msg.chat.id;
+  const fileId = msg.photo[msg.photo.length - 1].file_id;
 
   try {
-    const response = await fetch("https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0", {
+    const fileUrl = await bot.getFileLink(fileId);
+    const response = await axios({
       method: "POST",
+      url: "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0",
       headers: {
-        "Content-Type": "application/json",
         Authorization: `Bearer ${HF_API_KEY}`,
+        "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        inputs: prompt,
+      data: {
+        inputs: "variant of previous image",
         parameters: {
-          negative_prompt: negativePrompt,
-          quality: quality === "premium" ? "high" : "standard",
+          init_image: fileUrl,
+          strength: 0.7,
         },
-      }),
+      },
+      responseType: "arraybuffer",
     });
 
-    if (!response.ok) throw new Error(`HTTP Error! Status: ${response.status}`);
+    const imagePath = `output-${chatId}.png`;
+    fs.writeFileSync(imagePath, response.data);
+    await bot.sendPhoto(chatId, imagePath);
 
-    const buffer = await response.arrayBuffer();
-    ctx.replyWithPhoto({ source: Buffer.from(buffer) });
+    fs.unlinkSync(imagePath);
   } catch (error) {
     console.error(error);
-    ctx.reply("❌ Failed to generate image. Please try again later.");
+    bot.sendMessage(chatId, "Error generating the image. Please try again.");
   }
 });
 
-bot.launch().then(() => console.log("🚀 Telegram Bot is running..."));
-
-process.once("SIGINT", () => bot.stop("SIGINT"));
-process.once("SIGTERM", () => bot.stop("SIGTERM"));
+console.log("Bot is running...");
