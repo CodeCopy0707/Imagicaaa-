@@ -46,13 +46,22 @@ const updateActivity = (userId) => {
   });
 };
 
+// Check user inactivity (30 min timeout)
+const checkInactivity = (userId) => {
+  const session = userSessions.get(userId);
+  if (!session) return true;
+  
+  const inactiveTime = Date.now() - session.lastActive;
+  return inactiveTime > 30 * 60; // 30 minutes
+};
+
 const bot = new Telegraf(TELEGRAM_BOT_TOKEN);
 
 // Enhanced welcome message
 bot.start((ctx) => {
   const userId = ctx.from.id;
   updateActivity(userId);
-  ctx.reply("🎨 Welcome to the Advanced AI Image Generator! 🚀\n\n" +
+  ctx.reply("🎨 Welcome to My Advanced AI Image Generator! 🚀\n\n" +
     "Here's what I can do:\n\n" +
     "🖼 Generate high-quality images from descriptions\n" +
     "🔄 Create multiple artistic variations\n" +
@@ -73,7 +82,7 @@ bot.command('help', async (ctx) => {
   const userId = ctx.from.id;
   updateActivity(userId);
   
-  const model = genAI.getGenerativeModel({ model: "gemini-pro"});
+  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash"});
   const prompt = "You are an advanced AI image generation assistant. Provide a detailed guide about your capabilities including: image generation, style control, variations, best practices for prompts, and advanced features. Make it engaging and informative.";
   
   try {
@@ -274,4 +283,3 @@ bot.launch().then(() => console.log("🚀 Advanced AI Image Generator is running
 // Graceful shutdown
 process.once("SIGINT", () => bot.stop("SIGINT"));
 process.once("SIGTERM", () => bot.stop("SIGTERM"));
-
