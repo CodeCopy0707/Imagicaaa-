@@ -1,10 +1,8 @@
 import { Telegraf } from "telegraf";
 import fetch from "node-fetch";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import dotenv from 'dotenv';
 
 // Load environment variables
-dotenv.config();
 
 // API Keys from environment variables
 const TELEGRAM_BOT_TOKEN = "7813374449:AAENBb8BN8_oD2QOSP31tKO6WjpS4f0Dt4g";
