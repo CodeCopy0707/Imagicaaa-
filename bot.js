@@ -51,7 +51,7 @@ const checkInactivity = (userId) => {
   if (!session) return true;
   
   const inactiveTime = Date.now() - session.lastActive;
-  return inactiveTime > 30 * 60 * 1000; // 30 minutes
+  return inactiveTime > 30 * 60; // 30 minutes
 };
 
 const bot = new Telegraf(TELEGRAM_BOT_TOKEN);
