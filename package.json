@@ -3,13 +3,12 @@
   "version": "1.0.0",
   "description": "An advanced Telegram bot with AI-powered image generation and help features.",
   "main": "index.js",
+  "type": "module",
   "scripts": {
-    "start": "node index.js"
+    "start": "node bot.js"
   },
   "dependencies": {
     "telegraf": "^4.12.0",
-    "node-fetch": "^3.3.2",
-    "fs": "^0.0.1-security",
-    "path": "^0.12.7"
+    "node-fetch": "^3.3.2"
   }
 }
