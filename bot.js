@@ -3,15 +3,12 @@ import { Telegraf } from 'telegraf';
 import fetch from 'node-fetch';
 import bodyParser from 'body-parser';
 
-
 // ✅ Load Environment Variables
-
-
 const TELEGRAM_BOT_TOKEN = '7813374449:AAENBb8BN8_oD2QOSP31tKO6WjpS4f0Dt4g';
-const HF_API_KEY ='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';
+const HF_API_KEY = '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';
 const GEMINI_API_KEY = 'AIzaSyDc7u7wTVdDG3zP18xnELKs0HX7-hImkmc';
-const PORT = 3000;
-const SERVER_URL = "https://imagicaaa-1.onrender.com";
+const PORT = process.env.PORT || 3000;
+const SERVER_URL = "https://imagicaaa-1.onrender.com"; // Replace with your Render domain
 
 // ✅ Initialize Express & Bot
 const app = express();
@@ -70,8 +67,14 @@ async function chatWithGemini(message) {
             body: JSON.stringify({ prompt: message })
         });
 
+        if (!response.ok) throw new Error(`Gemini API Error: ${response.status}`);
+
         const data = await response.json();
-        return data.candidates?.[0]?.output || "🤖 AI is unable to respond!";
+        if (!data || !data.candidates || data.candidates.length === 0) {
+            throw new Error("Invalid AI Response");
+        }
+        
+        return data.candidates[0].output || "🤖 AI is unable to respond!";
     } catch (error) {
         console.error("❌ Chat AI Error:", error);
         return "❌ AI Chat is not available right now!";
@@ -88,12 +91,32 @@ bot.command('chat', async (ctx) => {
     ctx.reply(reply);
 });
 
+// 🌍 Express Server for Webhook
+app.post(`/${TELEGRAM_BOT_TOKEN}`, (req, res) => {
+    bot.handleUpdate(req.body, res);
+});
+app.get('/', (req, res) => res.send('🤖 AI Telegram Bot is Running...'));
+
+// 🔗 Set Webhook & Start Server
+app.listen(PORT, async () => {
+    console.log(`🚀 Server running on port ${PORT}`);
+
+    // 🔗 Set Webhook
+    try {
+        const webhookUrl = `${SERVER_URL}/${TELEGRAM_BOT_TOKEN}`;
+        await bot.telegram.setWebhook(webhookUrl);
+        console.log(`✅ Webhook set: ${webhookUrl}`);
+    } catch (error) {
+        console.error("❌ Failed to set webhook:", error);
+    }
+});
+
 // 🔄 Keep Bot Alive (Prevent Render Sleep)
 setInterval(() => {
     fetch(SERVER_URL)
         .then(() => console.log(`✅ Keep-alive ping sent to ${SERVER_URL}`))
         .catch(err => console.error("❌ Keep-alive failed:", err));
-}, 25000); // Ping every 25 sec
+}, 300000); // Ping every 5 minutes (instead of 25 sec)
 
 // 🚀 Auto-Restart if Bot Crashes
 process.on("uncaughtException", (err) => {
@@ -101,11 +124,3 @@ process.on("uncaughtException", (err) => {
     console.log("🔄 Restarting bot...");
     setTimeout(() => process.exit(1), 1000);
 });
-
-// 🌍 Express Server for Hosting
-app.get('/', (req, res) => res.send('🤖 AI Telegram Bot is Running...'));
-app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
-
-// 🚀 Start Bot
-bot.launch()
-console.log("🚀 Bot started using long polling...");
