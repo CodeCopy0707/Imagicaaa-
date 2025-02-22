@@ -137,8 +137,8 @@ bot.on("text", async (ctx) => {
     });
 
     if (!response.ok) {
-      if (response.status === 402) {
-        throw new Error("The API quota has been exceeded. Please try again later or upgrade your plan.");
+      if (response.status === 402 || response.status === 429) {
+        throw new Error("The API quota has been exceeded or rate limited. Please try again later.");
       }
       throw new Error(`HTTP Error! Status: ${response.status}`);
     }
@@ -179,8 +179,8 @@ bot.on("text", async (ctx) => {
 
   } catch (error) {
     console.error(error);
-    if (error.message.includes("API quota")) {
-      ctx.reply("❌ Sorry, the service is currently at capacity. Please try again later.");
+    if (error.message.includes("API quota") || error.message.includes("rate limited")) {
+      ctx.reply("❌ Sorry, the service is currently at capacity or rate limited. Please try again in a few minutes.");
     } else {
       ctx.reply("❌ Generation failed. Please try again or check your prompt.");
     }
@@ -214,8 +214,8 @@ bot.action('variations', async (ctx) => {
     
     ctx.reply("✨ Here are your variations! Which one do you like best?");
   } catch (error) {
-    if (error.message.includes("API quota")) {
-      ctx.reply("❌ Sorry, the service is currently at capacity. Please try again later.");
+    if (error.message.includes("API quota") || error.message.includes("rate limited")) {
+      ctx.reply("❌ Sorry, the service is currently at capacity or rate limited. Please try again in a few minutes.");
     } else {
       ctx.reply("Failed to generate variations. Please try again.");
     }
@@ -241,8 +241,8 @@ async function generateImage(prompt) {
   });
 
   if (!response.ok) {
-    if (response.status === 402) {
-      throw new Error("The API quota has been exceeded. Please try again later or upgrade your plan.");
+    if (response.status === 402 || response.status === 429) {
+      throw new Error("The API quota has been exceeded or rate limited. Please try again later.");
     }
     throw new Error(`HTTP Error! Status: ${response.status}`);
   }
@@ -251,7 +251,15 @@ async function generateImage(prompt) {
   return Buffer.from(buffer);
 }
 
-bot.launch().then(() => console.log("🚀 AI Image Generator is running..."));
+// Initialize bot with polling options to prevent conflicts
+const botOptions = {
+  polling: {
+    timeout: 30,
+    limit: 100
+  }
+};
+
+bot.launch(botOptions).then(() => console.log("🚀 AI Image Generator is running..."));
 
 // Graceful shutdown
 process.once("SIGINT", () => bot.stop("SIGINT"));
