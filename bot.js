@@ -28,7 +28,7 @@ const imageHistory = new Map();
 const keepAlive = () => {
   setInterval(() => {
     fetch("https://imagicaaa-1.onrender.com").catch(console.error);
-  }, 300000); // 5 minutes
+  }, 30000); // 5 minutes
 };
 
 // Start keepAlive immediately
@@ -136,7 +136,12 @@ bot.on("text", async (ctx) => {
       }),
     });
 
-    if (!response.ok) throw new Error(`HTTP Error! Status: ${response.status}`);
+    if (!response.ok) {
+      if (response.status === 402) {
+        throw new Error("The API quota has been exceeded. Please try again later or upgrade your plan.");
+      }
+      throw new Error(`HTTP Error! Status: ${response.status}`);
+    }
 
     const buffer = await response.arrayBuffer();
     
@@ -174,7 +179,11 @@ bot.on("text", async (ctx) => {
 
   } catch (error) {
     console.error(error);
-    ctx.reply("❌ Generation failed. Please try again or check your prompt.");
+    if (error.message.includes("API quota")) {
+      ctx.reply("❌ Sorry, the service is currently at capacity. Please try again later.");
+    } else {
+      ctx.reply("❌ Generation failed. Please try again or check your prompt.");
+    }
   }
 });
 
@@ -205,7 +214,11 @@ bot.action('variations', async (ctx) => {
     
     ctx.reply("✨ Here are your variations! Which one do you like best?");
   } catch (error) {
-    ctx.reply("Failed to generate variations. Please try again.");
+    if (error.message.includes("API quota")) {
+      ctx.reply("❌ Sorry, the service is currently at capacity. Please try again later.");
+    } else {
+      ctx.reply("Failed to generate variations. Please try again.");
+    }
   }
 });
 
@@ -226,6 +239,13 @@ async function generateImage(prompt) {
       },
     }),
   });
+
+  if (!response.ok) {
+    if (response.status === 402) {
+      throw new Error("The API quota has been exceeded. Please try again later or upgrade your plan.");
+    }
+    throw new Error(`HTTP Error! Status: ${response.status}`);
+  }
 
   const buffer = await response.arrayBuffer();
   return Buffer.from(buffer);
