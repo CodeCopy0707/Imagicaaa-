@@ -107,5 +107,4 @@ app.get('/', (req, res) => res.send('🤖 AI Telegram Bot is Running...'));
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
 
 // 🚀 Start Bot
-bot.launch();
 console.log("🚀 Bot started using long polling...");
