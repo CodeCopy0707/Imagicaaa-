@@ -1,39 +1,38 @@
 import { Telegraf } from "telegraf";
 import fetch from "node-fetch";
+import express from "express";
 
 // API Keys (Directly Added - Not Recommended for Production)
 const TELEGRAM_BOT_TOKEN = "7813374449:AAENBb8BN8_oD2QOSP31tKO6WjpS4f0Dt4g";
 const HF_API_KEY = "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";
 
+// Create Express app and define port
+const app = express();
+const port = process.env.PORT || 3000;
+
+// Basic route to keep the server alive
+app.get("/", (req, res) => {
+  res.send("Bot is running!");
+});
+
+// Start Express server
+app.listen(port, () => {
+  console.log(`Server is running on port ${port}`);
+});
+
 // In-memory storage instead of Redis
 const userSessions = new Map();
 const imageHistory = new Map();
 
-// Keep bot active by pinging every 30 seconds
+// Keep bot active by pinging every 5 minutes
 const keepAlive = () => {
   setInterval(() => {
     fetch("https://imagicaaa-1.onrender.com").catch(console.error);
-  }, 30000);
+  }, 300000); // 5 minutes
 };
 
 // Start keepAlive immediately
 keepAlive();
-
-// Additional ping to another URL as backup
-setInterval(() => {
-  fetch("https://imagicaaa-1.onrender.com").catch(console.error);
-}, 30000);
-
-// Ping multiple endpoints to ensure uptime
-const pingEndpoints = [
-  "https://imagicaaa-1.onrender.com",
-];
-
-setInterval(() => {
-  pingEndpoints.forEach(endpoint => {
-    fetch(endpoint).catch(console.error);
-  });
-}, 30000);
 
 const updateActivity = (userId) => {
   userSessions.set(userId, {
@@ -231,9 +230,6 @@ async function generateImage(prompt) {
   const buffer = await response.arrayBuffer();
   return Buffer.from(buffer);
 }
-
-// Keep bot active on Render
-keepAlive();
 
 bot.launch().then(() => console.log("🚀 AI Image Generator is running..."));
 
