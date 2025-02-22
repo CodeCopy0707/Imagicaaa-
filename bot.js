@@ -1,126 +1,242 @@
-import express from 'express';
-import { Telegraf } from 'telegraf';
-import fetch from 'node-fetch';
-import bodyParser from 'body-parser';
+import { Telegraf } from "telegraf";
+import fetch from "node-fetch";
 
-// ✅ Load Environment Variables
-const TELEGRAM_BOT_TOKEN = '7813374449:AAENBb8BN8_oD2QOSP31tKO6WjpS4f0Dt4g';
-const HF_API_KEY = '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';
-const GEMINI_API_KEY = 'AIzaSyDc7u7wTVdDG3zP18xnELKs0HX7-hImkmc';
-const PORT = process.env.PORT || 3000;
-const SERVER_URL = "https://imagicaaa-1.onrender.com"; // Replace with your Render domain
+// API Keys (Directly Added - Not Recommended for Production)
+const TELEGRAM_BOT_TOKEN = "7813374449:AAENBb8BN8_oD2QOSP31tKO6WjpS4f0Dt4g";
+const HF_API_KEY = "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";
 
-// ✅ Initialize Express & Bot
-const app = express();
-app.use(bodyParser.json());
+// In-memory storage instead of Redis
+const userSessions = new Map();
+const imageHistory = new Map();
+
+// Keep bot active by pinging every 30 seconds
+const keepAlive = () => {
+  setInterval(() => {
+    fetch("https://imagicaaa-1.onrender.com").catch(console.error);
+  }, 30000);
+};
+
+// Start keepAlive immediately
+keepAlive();
+
+// Additional ping to another URL as backup
+setInterval(() => {
+  fetch("https://imagicaaa-1.onrender.com").catch(console.error);
+}, 30000);
+
+// Ping multiple endpoints to ensure uptime
+const pingEndpoints = [
+  "https://imagicaaa-1.onrender.com",
+];
+
+setInterval(() => {
+  pingEndpoints.forEach(endpoint => {
+    fetch(endpoint).catch(console.error);
+  });
+}, 30000);
+
+const updateActivity = (userId) => {
+  userSessions.set(userId, {
+    ...userSessions.get(userId),
+    lastActive: Date.now()
+  });
+};
+
+const checkInactivity = (userId) => {
+  const session = userSessions.get(userId);
+  if (!session) return true;
+  
+  const inactiveTime = Date.now() - session.lastActive;
+  return inactiveTime > 30 * 60 * 1000; // 30 minutes
+};
 
 const bot = new Telegraf(TELEGRAM_BOT_TOKEN);
 
-// 🔹 Bot Commands
-bot.start((ctx) => ctx.reply(
-    "👋 Welcome to AI Bot!\n\n" +
-    "📸 /image <prompt> - Generate AI Image\n" +
-    "💬 /chat <message> - Chat with AI\n"
-));
-
-// 🎨 AI Image Generation Function
-async function generateImage(prompt) {
-    try {
-        const response = await fetch('https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${HF_API_KEY}`
-            },
-            body: JSON.stringify({ inputs: prompt })
-        });
-
-        if (!response.ok) throw new Error(`Failed with status: ${response.status}`);
-
-        return await response.arrayBuffer();
-    } catch (error) {
-        console.error("❌ Image Generation Error:", error);
-        return null;
-    }
-}
-
-// 📸 Handle /image Command
-bot.command('image', async (ctx) => {
-    const prompt = ctx.message.text.replace('/image ', '').trim();
-    if (!prompt) return ctx.reply("❌ Please provide a prompt. Example: /image cyberpunk city");
-
-    ctx.reply("🎨 Generating image...");
-    const image = await generateImage(prompt);
-    if (image) {
-        await ctx.replyWithPhoto({ source: Buffer.from(image) });
-    } else {
-        ctx.reply("❌ Image generation failed!");
-    }
+// Enhanced welcome message
+bot.start((ctx) => {
+  const userId = ctx.from.id;
+  updateActivity(userId);
+  ctx.reply("🎨 Welcome to the AI Image Generator! 🚀\n\n" +
+    "Here's what I can do:\n\n" +
+    "🖼 Generate high-quality images from descriptions\n" +
+    "🔄 Create multiple artistic variations\n" +
+    "🎯 Fine-tune image parameters\n" +
+    "📊 Track your generation history\n" +
+    "🔍 Advanced style controls\n\n" +
+    "Commands:\n" +
+    "/generate - Start image generation\n" +
+    "/styles - View available styles\n" +
+    "/history - View your recent generations\n" +
+    "/help - Get detailed help\n\n" +
+    "Send a description to begin creating!");
 });
 
-// 💬 AI Chat Function Using Gemini API
-async function chatWithGemini(message) {
-    try {
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateText?key=${GEMINI_API_KEY}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ prompt: message })
-        });
+// Help command
+bot.command('help', async (ctx) => {
+  const userId = ctx.from.id;
+  updateActivity(userId);
+  
+  ctx.reply("Need help? Here's a quick guide:\n\n" +
+    "1. Write detailed descriptions\n" +
+    "2. Specify art style if desired\n" +
+    "3. Use /styles to see style options\n" +
+    "4. Generate variations of results\n" +
+    "5. Save favorites to history");
+});
 
-        if (!response.ok) throw new Error(`Gemini API Error: ${response.status}`);
+// Styles command
+bot.command('styles', (ctx) => {
+  ctx.reply("Available Styles 🎨\n\n" +
+    "• Photorealistic\n" +
+    "• Digital Art\n" +
+    "• Oil Painting\n" +
+    "• Watercolor\n" +
+    "• Anime\n" +
+    "• 3D Render\n" +
+    "• Sketch\n" +
+    "• Pop Art\n\n" +
+    "Add style to your prompt like:\n" +
+    "'mountain landscape in watercolor style'");
+});
 
-        const data = await response.json();
-        if (!data || !data.candidates || data.candidates.length === 0) {
-            throw new Error("Invalid AI Response");
+// Image generation
+bot.on("text", async (ctx) => {
+  const userId = ctx.from.id;
+  const prompt = ctx.message.text;
+  
+  if (await checkInactivity(userId)) {
+    ctx.reply("Welcome back! Starting new session.");
+  }
+  
+  updateActivity(userId);
+
+  const negativePrompt = "low quality, blurry, distorted, ugly, bad anatomy";
+  const quality = "premium";
+
+  // Show processing message with style detection
+  const styleMatch = prompt.match(/in (\w+) style/i);
+  const detectedStyle = styleMatch ? styleMatch[1] : "default";
+  
+  await ctx.reply(`🎨 Processing your request...\n\nPrompt: ${prompt}\nStyle: ${detectedStyle}\nQuality: Premium\n\nPlease wait while I create your masterpiece!`);
+
+  try {
+    const response = await fetch("https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${HF_API_KEY}`,
+      },
+      body: JSON.stringify({
+        inputs: prompt,
+        parameters: {
+          negative_prompt: negativePrompt,
+          quality: "high",
+          guidance_scale: 7.5,
+          num_inference_steps: 50,
+        },
+      }),
+    });
+
+    if (!response.ok) throw new Error(`HTTP Error! Status: ${response.status}`);
+
+    const buffer = await response.arrayBuffer();
+    
+    // Store in memory
+    if (!imageHistory.has(userId)) {
+      imageHistory.set(userId, []);
+    }
+    const userHistory = imageHistory.get(userId);
+    userHistory.push({
+      prompt,
+      timestamp: Date.now(),
+      image: Buffer.from(buffer).toString('base64')
+    });
+    
+    // Keep only last 10 images
+    if (userHistory.length > 10) {
+      userHistory.shift();
+    }
+
+    // Send response
+    await ctx.replyWithPhoto(
+      { source: Buffer.from(buffer) },
+      {
+        caption: `🎨 Here's your creation!\n\nPrompt: "${prompt}"\nStyle: ${detectedStyle}\nQuality: Premium`,
+        reply_markup: {
+          inline_keyboard: [
+            [
+              { text: "🔄 Generate Variations", callback_data: "variations" },
+              { text: "🎨 Change Style", callback_data: "style" }
+            ]
+          ]
         }
-        
-        return data.candidates[0].output || "🤖 AI is unable to respond!";
-    } catch (error) {
-        console.error("❌ Chat AI Error:", error);
-        return "❌ AI Chat is not available right now!";
+      }
+    );
+
+  } catch (error) {
+    console.error(error);
+    ctx.reply("❌ Generation failed. Please try again or check your prompt.");
+  }
+});
+
+// Variations handler
+bot.action('variations', async (ctx) => {
+  const userId = ctx.from.id;
+  updateActivity(userId);
+
+  const userHistory = imageHistory.get(userId);
+  const lastImage = userHistory?.[userHistory.length - 1];
+  
+  if (!lastImage) {
+    return ctx.reply("No recent image found. Please generate an image first!");
+  }
+
+  ctx.reply("🎨 Creating artistic variations...\n\nGenerating 3 unique interpretations of your image!");
+
+  try {
+    const variations = await Promise.all([
+      generateImage(`${lastImage.prompt} in a different artistic style, high quality`),
+      generateImage(`${lastImage.prompt} with dramatic lighting and composition`),
+      generateImage(`${lastImage.prompt} with alternative perspective and mood`)
+    ]);
+
+    for (const buffer of variations) {
+      await ctx.replyWithPhoto({ source: buffer });
     }
+    
+    ctx.reply("✨ Here are your variations! Which one do you like best?");
+  } catch (error) {
+    ctx.reply("Failed to generate variations. Please try again.");
+  }
+});
+
+async function generateImage(prompt) {
+  const response = await fetch("https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${HF_API_KEY}`,
+    },
+    body: JSON.stringify({
+      inputs: prompt,
+      parameters: {
+        negative_prompt: "low quality, blurry, distorted, ugly, bad anatomy",
+        quality: "high",
+        guidance_scale: 7.5,
+        num_inference_steps: 50,
+      },
+    }),
+  });
+
+  const buffer = await response.arrayBuffer();
+  return Buffer.from(buffer);
 }
 
-// 💬 Handle /chat Command
-bot.command('chat', async (ctx) => {
-    const message = ctx.message.text.replace('/chat ', '').trim();
-    if (!message) return ctx.reply("💬 Please send a message. Example: /chat How are you?");
+// Keep bot active on Render
+keepAlive();
 
-    ctx.reply("🤖 Thinking...");
-    const reply = await chatWithGemini(message);
-    ctx.reply(reply);
-});
+bot.launch().then(() => console.log("🚀 AI Image Generator is running..."));
 
-// 🌍 Express Server for Webhook
-app.post(`/${TELEGRAM_BOT_TOKEN}`, (req, res) => {
-    bot.handleUpdate(req.body, res);
-});
-app.get('/', (req, res) => res.send('🤖 AI Telegram Bot is Running...'));
-
-// 🔗 Set Webhook & Start Server
-app.listen(PORT, async () => {
-    console.log(`🚀 Server running on port ${PORT}`);
-
-    // 🔗 Set Webhook
-    try {
-        const webhookUrl = `${SERVER_URL}/${TELEGRAM_BOT_TOKEN}`;
-        await bot.telegram.setWebhook(webhookUrl);
-        console.log(`✅ Webhook set: ${webhookUrl}`);
-    } catch (error) {
-        console.error("❌ Failed to set webhook:", error);
-    }
-});
-
-// 🔄 Keep Bot Alive (Prevent Render Sleep)
-setInterval(() => {
-    fetch(SERVER_URL)
-        .then(() => console.log(`✅ Keep-alive ping sent to ${SERVER_URL}`))
-        .catch(err => console.error("❌ Keep-alive failed:", err));
-}, 300000); // Ping every 5 minutes (instead of 25 sec)
-
-// 🚀 Auto-Restart if Bot Crashes
-process.on("uncaughtException", (err) => {
-    console.error("❌ Uncaught Exception:", err);
-    console.log("🔄 Restarting bot...");
-    setTimeout(() => process.exit(1), 1000);
-});
+// Graceful shutdown
+process.once("SIGINT", () => bot.stop("SIGINT"));
+process.once("SIGTERM", () => bot.stop("SIGTERM"));
