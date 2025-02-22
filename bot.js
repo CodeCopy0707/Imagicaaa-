@@ -2,16 +2,16 @@ import express from 'express';
 import { Telegraf } from 'telegraf';
 import fetch from 'node-fetch';
 import bodyParser from 'body-parser';
-import dotenv from 'dotenv';
+
 
 // ✅ Load Environment Variables
-dotenv.config();
 
-const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '7813374449:AAENBb8BN8_oD2QOSP31tKO6WjpS4f0Dt4g';
-const HF_API_KEY = process.env.HF_API_KEY || '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';
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || 'AIzaSyDc7u7wTVdDG3zP18xnELKs0HX7-hImkmc';
-const PORT = process.env.PORT || 3000;
-const SERVER_URL = process.env.RENDER_EXTERNAL_URL || "https://imagicaaa-1.onrender.com";
+
+const TELEGRAM_BOT_TOKEN = '7813374449:AAENBb8BN8_oD2QOSP31tKO6WjpS4f0Dt4g';
+const HF_API_KEY ='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';
+const GEMINI_API_KEY = 'AIzaSyDc7u7wTVdDG3zP18xnELKs0HX7-hImkmc';
+const PORT = 3000;
+const SERVER_URL = "https://imagicaaa-1.onrender.com";
 
 // ✅ Initialize Express & Bot
 const app = express();
