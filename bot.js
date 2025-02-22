@@ -1,11 +1,11 @@
-
-
 const TELEGRAM_BOT_TOKEN = '7813374449:AAENBb8BN8_oD2QOSP31tKO6WjpS4f0Dt4g';
 const HF_API_KEY = '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';
 // const TELEGRAM_BOT_TOKEN = '';
 const GEMINI_API_KEY = 'AIzaSyDc7u7wTVdDG3zP18xnELKs0HX7-hImkmc';
 // const HF_API_KEY = 'YOUR_HUGGINGFACE_API_KEY';
 //const PORT = process.env.PORT || 3000;//
+
+
 
 
 import express from 'express';
@@ -15,10 +15,6 @@ import bodyParser from 'body-parser';
 
 const app = express();
 app.use(bodyParser.json());
-
-// const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || 'YOUR_TELEGRAM_BOT_TOKEN';
-// const HF_API_KEY = process.env.HF_API_KEY || 'YOUR_HUGGINGFACE_API_KEY';
-// const GEMINI_API_KEY = process.env.GEMINI_API_KEY || 'YOUR_GEMINI_API_KEY';
 
 const PORT = process.env.PORT || 3000;
 const SERVER_URL = process.env.RENDER_EXTERNAL_URL || "https://imagicaaa-1.onrender.com";
@@ -37,7 +33,7 @@ async function generateImage(prompt) {
     try {
         const response = await fetch('https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${HF_API_KEY}` },
+            headers: { 'Content-Type': 'application/json', 'Authorization': Bearer ${HF_API_KEY} },
             body: JSON.stringify({ inputs: prompt })
         });
 
@@ -62,7 +58,7 @@ bot.command('image', async (ctx) => {
 // 💬 AI Chat Using Gemini
 async function chatWithGemini(message) {
     try {
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateText?key=${GEMINI_API_KEY}`, {
+        const response = await fetch(https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateText?key=${GEMINI_API_KEY}, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ prompt: message })
@@ -85,34 +81,24 @@ bot.command('chat', async (ctx) => {
     ctx.reply(reply);
 });
 
-// 🔄 **Better Keep-Alive Mechanism**
-async function keepAlive() {
-    try {
-        await fetch(SERVER_URL);
-        console.log(`✅ Keep-alive ping sent to ${SERVER_URL}`);
-    } catch (err) {
-        console.error("❌ Keep-alive failed:", err);
-    }
-}
-setInterval(keepAlive, 25000); // Ping every 25 sec
+// 🔄 **Keep Bot Alive (Bypass Render Shutdown)**
+setInterval(() => {
+    fetch(SERVER_URL)
+        .then(() => console.log(✅ Keep-alive ping sent to ${SERVER_URL}))
+        .catch(err => console.error("❌ Keep-alive failed:", err));
+}, 25000); // Ping every 25 sec
 
-// 🛡 **Self-Healing Bot (Auto-Restart on Crash)**
+// 🚀 Auto-Restart if Bot Crashes
 process.on("uncaughtException", (err) => {
     console.error("❌ Uncaught Exception:", err);
     console.log("🔄 Restarting bot...");
     setTimeout(() => process.exit(1), 1000);
 });
 
-// 🔄 **Use UptimeRobot to Ping Every 5 Min**
-app.get('/ping', (req, res) => {
-    console.log("✅ External Keep-Alive Ping Received");
-    res.send("OK");
-});
-
-// 🌍 Express Server for Hosting
+// 🌍 Express Server for Render Hosting
 app.get('/', (req, res) => res.send('🤖 AI Telegram Bot is Running...'));
-app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+app.listen(PORT, () => console.log(🚀 Server running on port ${PORT}));
 
 // 🚀 Start Bot
 bot.launch();
-console.log("🚀 Bot started using long polling...");
+console.log("🚀 Bot started using long polling..."); 
