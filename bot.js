@@ -1,10 +1,11 @@
-// This code requires significant external libraries (Telegraf, Axios) and API keys.
+// This code requires significant external libraries (Telegraf, Axios, and optionally, a session library) and API keys.
 // Replace placeholders with your actual API keys and consider using environment variables for security.
 // This is a basic implementation.  It needs comprehensive error handling, input validation (e.g., prompt length, rate limiting),
 // and more robust features (e.g., saving images, user-specific settings, better keep-alive).  Consider using a database for persistent storage.
 
 const { Telegraf, Markup } = require('telegraf');
 const axios = require('axios');
+const session = require('telegraf-session-local'); // Use telegraf-session-local for session management
 
 // Use environment variables for sensitive data
 const BOT_TOKEN = process.env.BOT_TOKEN || '7813374449:AAENBb8BN8_oD2QOSP31tKO6WjpS4f0Dt4g'; // Fallback token for local testing ONLY.  Remove in production.
@@ -14,8 +15,8 @@ if (!process.env.BOT_TOKEN) {
 
 const bot = new Telegraf(BOT_TOKEN);
 
-// Add a session to the bot
-bot.use(Telegraf.session());
+// Add a session to the bot using telegraf-session-local
+bot.use(new session({ database: 'session_db.json' })); // Use a JSON file for session storage
 
 // Image generation function
 async function generateImage(prompt, style = '') {
@@ -104,10 +105,7 @@ bot.command('style', async (ctx) => {
 // Callback query handler for style selection
 bot.action(/^style_/, async (ctx) => {
     const style = ctx.callbackQuery.data.substring(6); // Extract style name
-     // Initialize session if it doesn't exist
-    if (!ctx.session) {
-        ctx.session = {};
-    }
+     // Session is automatically initialized now
     ctx.session.style = style; // Store style in session
     await ctx.answerCbQuery(`Style set to ${style}`); // Await the answerCbQuery
     await ctx.reply(`Style set to ${style}. Now use /imagine with your prompt.`); // Await the reply
