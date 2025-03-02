@@ -1,91 +1,156 @@
 const { Telegraf } = require("telegraf");
-const express = require("express");
 const fetch = require("node-fetch");
 const fs = require("fs");
 const { createCanvas, loadImage } = require("canvas");
 
-// 🚀 **Telegram Bot Setup**
-const BOT_TOKEN = "7813374449:AAENBb8BN8_oD2QOSP31tKO6WjpS4f0Dt4g"; // BotFather se liya hua token yahan daalo
+// **🚀 Telegram Bot Setup**
+const BOT_TOKEN = process.env.BOT_TOKEN || "YOUR_BOT_TOKEN"; // Replace with your actual bot token
 const bot = new Telegraf(BOT_TOKEN);
 
-const app = express();
-app.use(express.json());
+// **🤖 Image Generation Function**
+async function generateImage(prompt, enhanceType = "realistic") {
+    try {
+        // **✨ Enhanced Prompt Tuning**
+        let tuningText = ", ultra high resolution, 4K";
+        switch (enhanceType) {
+            case "realistic":
+                tuningText += ", realistic, professional lighting, cinematic";
+                break;
+            case "cartoon":
+                tuningText += ", cartoonish, vibrant colors, detailed";
+                break;
+            case "anime":
+                tuningText += ", anime style, detailed eyes, trending on artstation";
+                break;
+            default:
+                tuningText += ", artistic, creative, unique";
+        }
+        prompt += tuningText;
 
-// 📌 **Image Generate Karne Ka Function**
-async function generateImage(prompt) {
-  try {
-    // ✅ **Prompt Modify Karke Extra Details Add Karna**
-    const tuningText =
-      ", ultra high resolution, 4K, realistic, professional lighting, cinematic";
-    prompt += tuningText;
+        // ✅ **Pollinations AI Image API**
+        const response = await fetch(`https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?w=1024&h=1024`);
+        if (!response.ok) throw new Error("Failed to fetch image from AI!");
 
-    // ✅ **AI API Se Image Fetch Karna**
-    const response = await fetch(
-      `https://image.pollinations.ai/prompt/${encodeURIComponent(
-        prompt
-      )}?w=1024&h=1024`
-    );
-    if (!response.ok) throw new Error("AI se image generate karne me error!");
+        const imageUrl = response.url;
+        const imageBuffer = await fetch(imageUrl).then(res => res.buffer());
 
-    // ✅ **Image Buffer Me Convert Karna**
-    const imageUrl = response.url;
-    const imageBuffer = await fetch(imageUrl).then((res) => res.buffer());
+        // ✅ **Watermark Removal (Cropping)**
+        const img = await loadImage(imageBuffer);
+        const cropHeight = 850;
+        const canvas = createCanvas(img.width, cropHeight);
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, img.width, cropHeight, 0, 0, img.width, cropHeight);
+        const finalBuffer = canvas.toBuffer("image/png");
 
-    // ✅ **Watermark Remove Karne Ke Liye Cropping**
-    const img = await loadImage(imageBuffer);
-    const cropHeight = 850;
-    const canvas = createCanvas(img.width, cropHeight);
-    const ctx = canvas.getContext("2d");
-    ctx.drawImage(
-      img,
-      0,
-      0,
-      img.width,
-      cropHeight,
-      0,
-      0,
-      img.width,
-      cropHeight
-    );
+        return finalBuffer;
 
-    // ✅ **Final Cropped Image Buffer**
-    return canvas.toBuffer("image/png");
-  } catch (error) {
-    console.error("❌ Error Generating Image:", error);
-    return null;
-  }
+    } catch (error) {
+        console.error("❌ Image Generation Error:", error);
+        throw new Error("Image generation failed!");
+    }
 }
 
-// 🚀 **Telegram Bot Commands**
-bot.command("generate", async (ctx) => {
-  const prompt = ctx.message.text.substring(10); // Remove "/generate "
-  ctx.reply("🖼 Generating your AI image... Please wait!");
+// **Handler for /image command**
+bot.command("image", async (ctx) => {
+    const prompt = ctx.message.text.substring(7).trim(); // Extract prompt from command
+    if (!prompt) {
+        return ctx.reply("Please provide a prompt. Example: /image cat in space");
+    }
 
-  const imageBuffer = await generateImage(
-    prompt +
-      " telegraf se bnao and ye 40 sec inactivate pe bnd usse bypass render pe uske liye mechinsms @https://imagicaaa.onrender.com"
-  );
-  if (imageBuffer) {
-    ctx.sendPhoto({ source: imageBuffer }, { caption: "🎨 Here is your AI-generated image!" });
-  } else {
-    ctx.reply("❌ Image generation failed!");
-  }
+    try {
+        // **⏳ Send "Waiting" Message**
+        ctx.reply("Generating image, please wait...").then((msg) => {
+            // **🖼️ Generate Image with Default Settings**
+            generateImage(prompt)
+                .then(imageBuffer => {
+                    // **✅ Send Image to Telegram**
+                    ctx.replyWithPhoto({ source: imageBuffer }).then(() => {
+                        // **🗑️ Delete "Waiting" Message**
+                        bot.telegram.deleteMessage(ctx.chat.id, msg.message_id);
+                    });
+                })
+                .catch(error => {
+                    console.error("❌ Error:", error);
+                    ctx.reply("Failed to generate image.");
+                    bot.telegram.deleteMessage(ctx.chat.id, msg.message_id);
+                });
+        });
+    } catch (error) {
+        console.error("❌ Error:", error);
+        ctx.reply("Failed to generate image.");
+    }
 });
 
-// **🚀 Express Server Start (Optional)**
-const PORT = 3000;
+// **🚀 Inline Query for Image Generation with Options**
+bot.on("inline_query", async (ctx) => {
+    const query = ctx.inlineQuery.query.trim();
 
-// Keep the Render server alive (Heroku-like)
-setInterval(() => {
-  fetch("https://imagicaaa.onrender.com")
-    .then((res) => console.log("ping render server"))
-    .catch((err) => console.error("Error pinging render:", err));
-}, 25 * 60 * 1000); // every 25 minutes
+    if (!query) {
+        return ctx.answerInlineQuery([]); // Empty result if no query
+    }
 
-app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
+    const imageStyles = [
+        { type: "realistic", label: "Realistic" },
+        { type: "cartoon", label: "Cartoon" },
+        { type: "anime", label: "Anime" },
+        { type: "artistic", label: "Artistic" },
+    ];
 
+    const results = await Promise.all(
+        imageStyles.map(async (style) => {
+            try {
+                const imageBuffer = await generateImage(query, style.type);
+                const photo = {
+                    type: "photo",
+                    id: style.type,
+                    photo: { source: imageBuffer },
+                    title: `Generate ${style.label} Image`,
+                    caption: `Prompt: ${query} - Style: ${style.label}`,
+                };
+                return photo;
+            } catch (error) {
+                console.error(`❌ Error generating ${style.label} image:`, error);
+                return null; // Handle errors gracefully
+            }
+        })
+    );
+
+    const validResults = results.filter(result => result !== null); // Filter out any failed results
+
+    return ctx.answerInlineQuery(validResults, {
+        cache_time: 0, // Disable cache for dynamic results
+    });
+});
+
+// **✨ Additional Features (Example)**
+bot.help((ctx) => {
+    ctx.reply(`
+Available commands:
+/image [prompt] - Generates an image based on the prompt.
+You can also use inline queries: type @[bot_name] [prompt] to generate images with different styles.
+`);
+});
+
+// **🛡️ Error Handling**
+bot.catch((err, ctx) => {
+    console.error("❌ Bot Error:", err);
+    ctx.reply("An error occurred. Please try again later.");
+});
+
+// **🚀 Launch the Bot**
 bot.launch();
 
-// Enable graceful stop
-process.once("SIGINT", () => bot.stop("SIGINT"));
-process.once("SIGTERM", () => bot.stop("SIGTERM"));
+// **Graceful Shutdown**
+process.on("SIGINT", () => {
+    bot.stop("SIGINT");
+    process.exit(0);
+});
+
+// **Bypass Inactivity Shutdown (using setInterval)**
+setInterval(() => {
+    // You can add code here to perform a simple task,
+    // like logging a message or sending a ping to the bot,
+    // to keep it active and prevent it from being shut down
+    // due to inactivity.
+    console.log("Bot is still active...");
+}, 20 * 60 * 1000); // Every 20 minutes
