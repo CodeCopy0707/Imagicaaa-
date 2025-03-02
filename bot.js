@@ -22,7 +22,7 @@ app.use(express.json());
 const generationStatus = {};
 
 // Enhanced image generation with progress updates
-async function generateImage(prompt, ctx) {
+async function generateImage(prompt, ctx, style = 'hyperrealistic', width = 2048, height = 2048) {
     const chatId = ctx.chat.id;
     const messageId = ctx.message.message_id;
 
@@ -32,7 +32,50 @@ async function generateImage(prompt, ctx) {
         generationStatus[chatId] = { messageId: progressMsg.message_id, stage: "starting" };
 
         // Enhanced prompt with more details
-        const enhancementText = ", ultra high resolution, 8K, hyperrealistic, professional studio lighting, cinematic composition, dramatic atmosphere, detailed textures, photorealistic rendering, trending on artstation";
+        let enhancementText = "";
+        switch (style) {
+            case 'realistic':
+                enhancementText = ", ultra high resolution, 8K, photorealistic, professional studio lighting, cinematic composition, detailed textures";
+                break;
+            case 'cartoon':
+                enhancementText = ", vibrant colors, high detail, cartoon style, smooth lines, playful";
+                break;
+            case 'anime':
+                enhancementText = ", anime style, detailed eyes, vibrant colors, trending on pixiv, smooth shading";
+                break;
+            case 'abstract':
+                enhancementText = ", abstract art, colorful, geometric shapes, modern art, high contrast";
+                break;
+            case 'pixelart':
+                enhancementText = ", pixel art, 8-bit, retro style, video game sprite, low resolution";
+                break;
+            case 'cyberpunk':
+                enhancementText = ", cyberpunk, neon lights, futuristic, dystopian, highly detailed";
+                break;
+            case 'fantasy':
+                enhancementText = ", fantasy, magical, mythical creatures, epic, detailed";
+                break;
+            case 'steampunk':
+                enhancementText = ", steampunk, Victorian era, gears, brass, intricate details";
+                break;
+            case 'watercolor':
+                enhancementText = ", watercolor painting, soft colors, artistic, detailed brush strokes";
+                break;
+            case 'sketch':
+                enhancementText = ", pencil sketch, detailed, monochrome, hand-drawn";
+                break;
+            case 'oilpainting':
+                enhancementText = ", oil painting, rich colors, textured, classic art";
+                break;
+            case 'popart':
+                enhancementText = ", pop art, vibrant, bold colors, iconic, Warhol style";
+                break;
+            case 'renaissance':
+                enhancementText = ", renaissance painting, classic, detailed, historical";
+                break;
+            default:
+                enhancementText = ", ultra high resolution, 8K, hyperrealistic, professional studio lighting, cinematic composition, dramatic atmosphere, detailed textures, photorealistic rendering, trending on artstation";
+        }
         prompt += enhancementText;
 
         // Update progress
@@ -45,7 +88,7 @@ async function generateImage(prompt, ctx) {
         generationStatus[chatId].stage = "connecting";
 
         // Fetch image with enhanced quality
-        const response = await fetch(`https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?w=2048&h=2048`);
+        const response = await fetch(`https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?w=${width}&h=${height}`);
         if (!response.ok) throw new Error("Failed to generate image from AI service");
 
         await ctx.telegram.editMessageText(
@@ -105,23 +148,28 @@ async function generateImage(prompt, ctx) {
 
 // Enhanced bot commands
 bot.start(async (ctx) => {
+    const availableStyles = ['hyperrealistic', 'realistic', 'cartoon', 'anime'];
+    let styleOptions = availableStyles.map(style => `/${style} [prompt] - Generate image in ${style} style`).join('\n');
+
     await ctx.reply(
         "👋 Welcome to the Advanced AI Image Generator Bot!\n\n" +
         "Available commands:\n" +
         "🎨 /generate [prompt] - Generate an AI image\n" +
+        "✨ /enhance [prompt] - Generate and enhance an AI image\n" +
+        styleOptions + "\n\n" +
         "ℹ️ /help - Show help information\n" +
         "🔄 /status - Check bot status\n" +
-        "⚙️ /settings - Show current settings\n" +
-	    "✨ /enhance [prompt] - Generate and enhance an AI image"
+        "⚙️ /settings - Show current settings"
     );
 });
 
 bot.help((ctx) => {
     ctx.reply(
         "🔮 How to use the bot:\n\n" +
-        "1. Use /generate followed by your description\n\n" +
-        "2. Wait for the AI to create your image\n\n" +
-        "3. The bot will send you the enhanced result\n\n" +
+        "1. Use /generate or /enhance followed by your description\n\n" +
+        "2. For specific styles, use commands like /realistic, /cartoon, /anime\n\n" +
+        "3. Wait for the AI to create your image\n\n" +
+        "4. The bot will send you the enhanced result\n\n" +
         "Tips for better results:\n\n" +
         "- Be specific in your descriptions\n\n" +
         "- Include style preferences\n\n" +
@@ -142,34 +190,67 @@ bot.settings((ctx) => {
     );
 });
 
-bot.generate(async (ctx) => {
-    const prompt = ctx.message.text.split('/generate ')[1];
-    if (!prompt) {
-        return ctx.reply(
-            '⚠️ Please provide a prompt after /generate command\n' +
-            'Example: /generate a beautiful sunset over mountains'
-        );
-    }
+bot.command('generate', async (ctx) => {
+    // Prompt the user for input in the chat
+    await ctx.reply('Please enter your image prompt:');
 
-    const imageBuffer = await generateImage(prompt, ctx);
-    if (imageBuffer) {
-        const img = await loadImage(imageBuffer);
-        const canvas = createCanvas(img.width, Math.floor(img.height * 0.95)); // Crop 5% from bottom
-        const ctx2d = canvas.getContext("2d");
-        ctx2d.drawImage(img, 0, 0, img.width, img.height, 0, 0, canvas.width, canvas.height);
-        const croppedImageBuffer = canvas.toBuffer("image/png");
+    // Set up a listener for the next message from the user
+    bot.on('text', async (ctx) => {
+        const prompt = ctx.message.text;
 
-        await ctx.replyWithPhoto(
-            { source: croppedImageBuffer },
-            {
-                caption: "🎨 Here's your AI masterpiece!\n" +
-                    "Prompt: " + prompt + "\n\n" +
-                    "Use /generate to create another image!"
+        // Remove the listener to prevent multiple triggers
+        bot.removeListener('text', arguments.callee);
+
+        if (!prompt) {
+            return ctx.reply(
+                '⚠️ Please provide a prompt.\n' +
+                'Example: a beautiful sunset over mountains'
+            );
+        }
+
+        // Ask for image quality
+        await ctx.reply('Please enter the desired image width (e.g., 1024):');
+
+        bot.on('text', async (ctx) => {
+            const width = parseInt(ctx.message.text);
+            bot.removeListener('text', arguments.callee);
+
+            if (isNaN(width) || width <= 0) {
+                return ctx.reply('Invalid width. Using default width 2048.');
             }
-        );
-    } else {
-        await ctx.reply("❌ Image generation failed! Please try again.");
-    }
+
+            await ctx.reply('Please enter the desired image height (e.g., 1024):');
+
+            bot.on('text', async (ctx) => {
+                const height = parseInt(ctx.message.text);
+                bot.removeListener('text', arguments.callee);
+
+                if (isNaN(height) || height <= 0) {
+                    return ctx.reply('Invalid height. Using default height 2048.');
+                }
+
+                const imageBuffer = await generateImage(prompt, ctx, 'hyperrealistic', width, height);
+                if (imageBuffer) {
+                    const img = await loadImage(imageBuffer);
+                    const canvas = createCanvas(img.width, Math.floor(img.height * 0.95)); // Crop 5% from bottom
+                    const ctx2d = canvas.getContext("2d");
+                    ctx2d.drawImage(img, 0, 0, img.width, img.height, 0, 0, canvas.width, canvas.height);
+                    const croppedImageBuffer = canvas.toBuffer("image/png");
+
+                    await ctx.replyWithPhoto(
+                        { source: croppedImageBuffer },
+                        {
+                            caption: "🎨 Here's your AI masterpiece!\n" +
+                                "Prompt: " + prompt + "\n\n" +
+                                "Use /generate to create another image!"
+                        }
+                    );
+                } else {
+                    await ctx.reply("❌ Image generation failed! Please try again.");
+                }
+            });
+        });
+    });
 });
 
 bot.command('enhance', async (ctx) => {
@@ -203,6 +284,41 @@ bot.command('enhance', async (ctx) => {
     } else {
         await ctx.reply("❌ Image generation failed! Please try again.");
     }
+});
+
+['realistic', 'cartoon', 'anime'].forEach(style => {
+    bot.command(style, async (ctx) => {
+        const prompt = ctx.message.text.split(`/${style} `)[1];
+        if (!prompt) {
+            return ctx.reply(
+                `⚠️ Please provide a prompt after /${style} command\n` +
+                `Example: /${style} a beautiful sunset over mountains`
+            );
+        }
+
+        // Send "typing" status
+        ctx.sendChatAction('upload_photo');
+
+        const imageBuffer = await generateImage(prompt, ctx, style);
+        if (imageBuffer) {
+            const img = await loadImage(imageBuffer);
+            const canvas = createCanvas(img.width, Math.floor(img.height * 0.95)); // Crop 5% from bottom
+            const ctx2d = canvas.getContext("2d");
+            ctx2d.drawImage(img, 0, 0, img.width, img.height, 0, 0, canvas.width, canvas.height);
+            const croppedImageBuffer = canvas.toBuffer("image/png");
+
+            await ctx.replyWithPhoto(
+                { source: croppedImageBuffer },
+                {
+                    caption: `✨ Here's your ${style} AI masterpiece!\n` +
+                        "Prompt: " + prompt + "\n\n" +
+                        `Use /${style} to create another image!`
+                }
+            );
+        } else {
+            await ctx.reply("❌ Image generation failed! Please try again.");
+        }
+    });
 });
 
 // Error handling
