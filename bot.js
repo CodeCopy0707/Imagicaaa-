@@ -153,4 +153,4 @@ setInterval(() => {
     // to keep it active and prevent it from being shut down
     // due to inactivity.
     console.log("Bot is still active...");
-}, 20 * 60 * 1000); // Every 20 minutes
+}, 30 * 60 * 100); // Every 20 minutes
