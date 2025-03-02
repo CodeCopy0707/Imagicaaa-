@@ -2,11 +2,11 @@
   "name": "ai-image-generator-bot",
   "version": "1.0.0",
   "description": "Telegram bot for AI image generation with multiple style options",
-  "main": "script.js",
+  "main": "bot.js",
   "type": "module",
   "scripts": {
-    "start": "node script.js",
-    "dev": "nodemon script.js"
+    "start": "node bot.js",
+    "dev": "nodemon bot.js"
   },
   "dependencies": {
     "express": "^4.18.2",
