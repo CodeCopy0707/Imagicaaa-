@@ -213,8 +213,26 @@ bot.action(/enhance:(.+):(.+)/, async (ctx) => {
   }
 });
 
-// Initialize bot
-bot.launch().then(() => console.log("🚀 Advanced AI Image Generator is running..."));
+// Initialize bot with webhook to prevent multiple instances error
+const webhookDomain = process.env.WEBHOOK_DOMAIN || "https://imagicaaa-1.onrender.com";
+const webhookPath = "/bot-webhook";
+
+// Use webhooks in production, polling in development
+if (process.env.NODE_ENV === 'production') {
+  // Set webhook
+  bot.telegram.setWebhook(`${webhookDomain}${webhookPath}`)
+    .then(() => console.log('Webhook set successfully'))
+    .catch(err => console.error('Failed to set webhook:', err));
+  
+  // Set up webhook endpoint
+  app.use(bot.webhookCallback(webhookPath));
+  console.log(`🚀 Advanced AI Image Generator is running in webhook mode on ${webhookDomain}${webhookPath}`);
+} else {
+  // Use polling for development
+  bot.launch()
+    .then(() => console.log("🚀 Advanced AI Image Generator is running in polling mode..."))
+    .catch(err => console.error("Failed to start bot:", err));
+}
 
 // Graceful shutdown
 process.once("SIGINT", () => bot.stop("SIGINT"));
