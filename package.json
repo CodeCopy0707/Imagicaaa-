@@ -1,18 +1,16 @@
 {
   "name": "telegram-image-bot",
   "version": "1.0.0",
-  "description": "A Telegram bot for generating images using AI.",
+  "description": "A Telegram bot that generates images using prompts.",
   "main": "bot.js",
   "scripts": {
     "start": "node bot.js"
   },
   "dependencies": {
     "telegraf": "^4.17.2",
-    "node-fetch": "^3.3.2",
-    "fs": "^0.0.1-security",
-    "canvas": "^2.11.2",
+    "axios": "^1.7.2"
   },
-  "devDependencies": {
-    "nodemon": "^3.1.0"
+  "engines": {
+    "node": ">=16.0.0"
   }
 }
