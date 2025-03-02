@@ -5,7 +5,7 @@ const fs = require("fs");
 const { createCanvas, loadImage } = require("canvas");
 
 // 🚀 **Telegram Bot Setup**
-const BOT_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"; // BotFather se liya hua token yahan daalo
+const BOT_TOKEN = "7813374449:AAENBb8BN8_oD2QOSP31tKO6WjpS4f0Dt4g"; // BotFather se liya hua token yahan daalo
 const bot = new Telegraf(BOT_TOKEN);
 
 const app = express();
