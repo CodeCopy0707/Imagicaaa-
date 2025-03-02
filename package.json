@@ -1,16 +1,17 @@
 {
-  "name": "telegram-image-bot",
+  "name": "telegram-ai-image-bot",
   "version": "1.0.0",
-  "description": "A Telegram bot that generates images using prompts.",
-  "main": "bot.js",
+  "description": "Telegram bot to generate AI images based on user prompts.",
+  "main": "index.js",
   "scripts": {
-    "start": "node bot.js"
+    "start": "node index.js"
   },
+  "author": "आपका नाम",
+  "license": "MIT",
   "dependencies": {
-  "telegraf": "4.16.3",
-  "axios": "1.7.2"
-  },
-  "engines": {
-    "node": ">=16.0.0"
+    "canvas": "^2.11.2",
+    "express": "^4.19.2",
+    "node-fetch": "^3.3.2",
+    "node-telegram-bot-api": "^0.66.0"
   }
 }
