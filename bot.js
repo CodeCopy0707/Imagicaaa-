@@ -2,11 +2,10 @@ import { Telegraf, Markup } from "telegraf";
 import express from "express";
 import fetch from "node-fetch";
 import fs from "fs";
-import { createCanvas, loadImage } from "canvas";
 
 // 🚀 **Telegram Bot Setup**
 const BOT_TOKEN = "7813374449:AAENBb8BN8_oD2QOSP31tKO6WjpS4f0Dt4g";  // BotFather se liya hua token yahan daalo
-const ADMIN_CHAT_ID = "749824465";  
+const ADMIN_CHAT_ID = "749824465";  // Admin ka chat ID yahan daalo
 const bot = new Telegraf(BOT_TOKEN);
 
 // 🔄 Active users tracking to prevent timeout
@@ -46,15 +45,8 @@ async function generateImage(prompt, style = "realistic") {
         const imageUrl = response.url;
         const imageBuffer = await fetch(imageUrl).then(res => res.buffer());
 
-        // ✅ **Watermark Remove Karne Ke Liye Cropping**
-        const img = await loadImage(imageBuffer);
-        const cropHeight = 800; // Niche se thoda aur crop karne ke liye height kam ki
-        const canvas = createCanvas(img.width, cropHeight);
-        const ctx = canvas.getContext("2d");
-        ctx.drawImage(img, 0, 0, img.width, cropHeight, 0, 0, img.width, cropHeight);
-
-        // ✅ **Final Cropped Image Buffer**
-        return canvas.toBuffer("image/png");
+        // Return the image buffer directly without cropping
+        return imageBuffer;
     } catch (error) {
         console.error("❌ Error Generating Image:", error);
         return null;
