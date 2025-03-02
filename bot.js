@@ -4,6 +4,12 @@ import express from "express";
 import sharp from "sharp";
 import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
+import { dirname } from "path";
+
+// Get __dirname equivalent in ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 // Create Express app and define port
 const app = express();
@@ -701,7 +707,7 @@ setInterval(() => {
     .then(() => console.log("Periodic keep-alive ping sent"))
     .catch(err => console.error("Periodic keep-alive ping failed:", err));
   
-}, 15 * 30 * 1000); //
+}, 15 * 30 * 1000); // Every 15 minutes
 
 // Graceful shutdown
 process.once("SIGINT", () => bot.stop("SIGINT"));
