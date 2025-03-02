@@ -1,404 +1,158 @@
-import { Telegraf, Markup } from "telegraf";
-import express from "express";
-import fetch from "node-fetch";
-import fs from "fs";
+const { Telegraf } = require('telegraf');
+const express = require("express");
+const fetch = require("node-fetch");
+const fs = require("fs");
+const { createCanvas, loadImage } = require("canvas");
 
 // 🚀 **Telegram Bot Setup**
-const BOT_TOKEN = "7813374449:AAENBb8BN8_oD2QOSP31tKO6WjpS4f0Dt4g";  // BotFather se liya hua token yahan daalo
-const ADMIN_CHAT_ID = "749824465";  // Admin ka chat ID yahan daalo
+const BOT_TOKEN = "7813374449:AAENBb8BN8_oD2QOSP31tKO6WjpS4f0Dt4g";
 const bot = new Telegraf(BOT_TOKEN);
 
-// 🔄 Active users tracking to prevent timeout
-const activeUsers = new Map();
-const TIMEOUT_DURATION = 40 * 1000; // 40 seconds
-const HEARTBEAT_INTERVAL = 30 * 1000; // 30 seconds
+// Keep alive mechanism
+const PING_INTERVAL = 30000; // 30 seconds
+setInterval(() => {
+    fetch("https://api.telegram.org/bot" + BOT_TOKEN + "/getMe")
+        .catch(err => console.log("Keep alive ping failed:", err));
+}, PING_INTERVAL);
 
 const app = express();
 app.use(express.json());
 
-// 🎨 **Image Style Options**
-const imageStyles = {
-    "realistic": ", ultra high resolution, 4K, realistic, professional lighting, cinematic, detailed texture, masterpiece",
-    "anime": ", anime style, vibrant colors, Studio Ghibli inspired, detailed, sharp lines, 2D animation style",
-    "cartoon": ", cartoon style, vibrant colors, Disney/Pixar inspired, exaggerated features, playful",
-    "oil": ", oil painting style, textured canvas, brush strokes visible, rich colors, classical art technique",
-    "watercolor": ", watercolor painting, soft edges, flowing colors, artistic, dreamy atmosphere",
-    "sketch": ", pencil sketch, detailed linework, shading, monochrome, artistic drawing",
-    "cyberpunk": ", cyberpunk style, neon lights, futuristic, high tech, dystopian, vibrant contrasts",
-    "fantasy": ", fantasy art style, magical, ethereal lighting, mystical atmosphere, detailed fantasy elements",
-    "vintage": ", vintage photography style, faded colors, nostalgic, retro aesthetic, film grain",
-    "3d": ", 3D rendered, volumetric lighting, detailed textures, photorealistic 3D model"
-};
-
-// 📌 **Image Generate Karne Ka Function**
-async function generateImage(prompt, style = "realistic") {
+// Enhanced image generation with progress updates
+async function generateImage(prompt, ctx) {
     try {
-        // ✅ **Prompt Modify Karke Extra Details Add Karna**
-        const tuningText = imageStyles[style] || imageStyles["realistic"];
-        prompt += tuningText;
+        // Send initial progress message
+        const progressMsg = await ctx.reply("🎨 Starting image generation process...");
+        
+        // Enhanced prompt with more details
+        const enhancementText = ", ultra high resolution, 8K, hyperrealistic, professional studio lighting, cinematic composition, dramatic atmosphere, detailed textures, photorealistic rendering";
+        prompt += enhancementText;
 
-        // ✅ **AI API Se Image Fetch Karna**
-        const response = await fetch(`https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?w=1024&h=1024`);
-        if (!response.ok) throw new Error("AI se image generate karne me error!");
+        // Update progress
+        await ctx.telegram.editMessageText(
+            progressMsg.chat.id, 
+            progressMsg.message_id,
+            null,
+            "🔄 Connecting to AI service..."
+        );
 
-        // ✅ **Image Buffer Me Convert Karna**
+        // Fetch image with enhanced quality
+        const response = await fetch(`https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?w=2048&h=2048`);
+        if (!response.ok) throw new Error("Failed to generate image from AI service");
+
+        await ctx.telegram.editMessageText(
+            progressMsg.chat.id,
+            progressMsg.message_id,
+            null,
+            "⚙️ Processing image..."
+        );
+
         const imageUrl = response.url;
         const imageBuffer = await fetch(imageUrl).then(res => res.buffer());
 
-        // Return the image buffer directly without cropping
-        return imageBuffer;
+        // Enhanced image processing
+        const img = await loadImage(imageBuffer);
+        const cropHeight = Math.floor(img.height * 0.85); // Remove watermark more precisely
+        const canvas = createCanvas(img.width, cropHeight);
+        const ctx2d = canvas.getContext("2d");
+        
+        // Apply image enhancements
+        ctx2d.drawImage(img, 0, 0, img.width, cropHeight, 0, 0, img.width, cropHeight);
+        ctx2d.globalCompositeOperation = 'overlay';
+        ctx2d.fillStyle = 'rgba(255,255,255,0.1)';
+        ctx2d.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Delete progress message
+        await ctx.telegram.deleteMessage(progressMsg.chat.id, progressMsg.message_id);
+
+        return canvas.toBuffer("image/png");
     } catch (error) {
-        console.error("❌ Error Generating Image:", error);
+        console.error("❌ Error in image generation:", error);
         return null;
     }
 }
 
-// 🔄 **Keep User Active Function**
-function keepUserActive(userId) {
-    activeUsers.set(userId, Date.now());
-}
-
-// 🔄 **Check if User is Active**
-function isUserActive(userId) {
-    const lastActive = activeUsers.get(userId);
-    if (!lastActive) return false;
-    return (Date.now() - lastActive) < TIMEOUT_DURATION;
-}
-
-// 🔄 **Cleanup Inactive Users Periodically**
-setInterval(() => {
-    const now = Date.now();
-    for (const [userId, lastActive] of activeUsers.entries()) {
-        if (now - lastActive > TIMEOUT_DURATION) {
-            activeUsers.delete(userId);
-        }
-    }
-}, 60000); // Check every minute
-
-// 🚀 **Telegram Bot Commands**
-bot.command('generate', async (ctx) => {
-    const promptText = ctx.message.text.substring(10); // Remove "/generate " from the message
-    if (!promptText) {
-        return ctx.reply("Please provide a description after /generate command");
-    }
-    
-    const chatId = ctx.chat.id;
-    const userId = ctx.from.id;
-    const userName = ctx.from.username || ctx.from.first_name || "Unknown User";
-    
-    // Keep user active
-    keepUserActive(userId);
-    
-    // Parse prompt and style if provided
-    let prompt = promptText;
-    let style = "realistic";
-    
-    if (promptText.includes("--style=")) {
-        const parts = promptText.split("--style=");
-        prompt = parts[0].trim();
-        style = parts[1].trim().toLowerCase();
-        if (!imageStyles[style]) {
-            style = "realistic";
-        }
-    }
-
-    // Admin ko notify karo ki kisi ne image generate ki hai
-    bot.telegram.sendMessage(ADMIN_CHAT_ID, `🔔 User Alert:\nUser: ${userName} (ID: ${userId})\nPrompt: "${prompt}"\nStyle: ${style}\nTime: ${new Date().toLocaleString()}`);
-
-    // User ko waiting message bhejo with better UI
-    const waitingMsg = await ctx.replyWithMarkdown(
-        "🎨 *AI Image Generator*\n\n" +
-        `🔄 Processing your request...\n` +
-        `🖌️ Style: *${style}*\n` +
-        `⏳ Creating masterpiece with AI...\n\n` +
-        `_This may take a few moments. Stay creative!_`
+// Enhanced bot commands
+bot.command('start', async (ctx) => {
+    await ctx.reply(
+        "👋 Welcome to the Advanced AI Image Generator Bot!\n\n" +
+        "Available commands:\n" +
+        "🎨 /generate [prompt] - Generate an AI image\n" +
+        "ℹ️ /help - Show help information\n" +
+        "🔄 /status - Check bot status\n" +
+        "⚙️ /settings - Show current settings"
     );
+});
 
-    const imageBuffer = await generateImage(prompt, style);
-    
-    // Delete waiting message for clean UI
-    ctx.deleteMessage(waitingMsg.message_id);
-    
+bot.command('help', (ctx) => {
+    ctx.reply(
+        "🔮 How to use the bot:\n\n" +
+        "1. Use /generate followed by your description\n\n" +
+        "2. Wait for the AI to create your image\n\n" +
+        "3. The bot will send you the enhanced result\n\n" +
+        "Tips for better results:\n\n" +
+        "- Be specific in your descriptions\n\n" +
+        "- Include style preferences\n\n" +
+        "- Mention colors and moods"
+    );
+});
+
+bot.command('status', (ctx) => {
+    ctx.reply("✅ Bot is running normally\n🔄 Last ping: " + new Date().toLocaleString());
+});
+
+bot.command('settings', (ctx) => {
+    ctx.reply(
+        "⚙️ Current Settings:\n" +
+        "Image Resolution: 2048x2048\n" +
+        "Enhancement Level: Maximum\n" +
+        "Auto-Improvement: Enabled"
+    );
+});
+
+bot.command('generate', async (ctx) => {
+    const prompt = ctx.message.text.split('/generate ')[1];
+    if (!prompt) {
+        return ctx.reply(
+            '⚠️ Please provide a prompt after /generate command\n' +
+            'Example: /generate a beautiful sunset over mountains'
+        );
+    }
+
+    const imageBuffer = await generateImage(prompt, ctx);
     if (imageBuffer) {
-        // Keep user active after successful generation
-        keepUserActive(userId);
-        
-        // Send image with inline keyboard for enhancement options
-        const message = await ctx.replyWithPhoto(
+        await ctx.replyWithPhoto(
             { source: imageBuffer },
             { 
-                caption: `🖼 *Your AI Masterpiece is Ready!*\n\n🔍 Prompt: "${prompt}"\n🖌️ Style: *${style}*\n\n✨ _Generated with Advanced AI_`, 
-                parse_mode: "Markdown",
-                ...Markup.inlineKeyboard([
-                    [
-                        Markup.button.callback("🔄 Regenerate", `regenerate:${prompt}:${style}`),
-                        Markup.button.callback("✨ Enhance", `enhance:${prompt}:${style}`)
-                    ],
-                    [
-                        Markup.button.callback("🎨 Change Style", `styles:${prompt}`)
-                    ]
-                ])
+                caption: "🎨 Here's your AI masterpiece!\n" +
+                        "Prompt: " + prompt + "\n\n" +
+                        "Use /generate to create another image!"
             }
-        );
-        
-        // Admin ko bhi image bhejo
-        bot.telegram.sendPhoto(
-            ADMIN_CHAT_ID, 
-            { source: imageBuffer }, 
-            { caption: `🖼 Image generated by ${userName} (ID: ${userId})\nPrompt: "${prompt}"\nStyle: ${style}` }
         );
     } else {
-        ctx.replyWithMarkdown("❌ *Image generation failed!*\nPlease try again with a different prompt.");
-        bot.telegram.sendMessage(ADMIN_CHAT_ID, `❌ Failed image generation attempt by ${userName} (ID: ${userId})\nPrompt: "${prompt}"\nStyle: ${style}`);
+        await ctx.reply("❌ Image generation failed! Please try again.");
     }
 });
 
-// Handle callback queries for inline buttons
-bot.on('callback_query', async (ctx) => {
-    const chatId = ctx.chat.id;
-    const userId = ctx.from.id;
-    const data = ctx.callbackQuery.data;
-    
-    // Keep user active on any interaction
-    keepUserActive(userId);
-    
-    if (data.startsWith('regenerate:')) {
-        const [_, prompt, style] = data.split(':');
-        
-        await ctx.answerCbQuery("Regenerating your image...");
-        
-        // Delete original message
-        await ctx.deleteMessage();
-        
-        // Send waiting message
-        const waitingMsg = await ctx.replyWithMarkdown(
-            "🎨 *Regenerating Image*\n\n" +
-            `🔄 Processing your request...\n` +
-            `🖌️ Style: *${style}*\n` +
-            `⏳ Creating a new masterpiece...\n\n` +
-            `_This may take a few moments_`
-        );
-        
-        const imageBuffer = await generateImage(prompt, style);
-        
-        // Delete waiting message
-        ctx.deleteMessage(waitingMsg.message_id);
-        
-        if (imageBuffer) {
-            ctx.replyWithPhoto(
-                { source: imageBuffer }, 
-                { 
-                    caption: `🖼 *Your Regenerated Masterpiece!*\n\n🔍 Prompt: "${prompt}"\n🖌️ Style: *${style}*\n\n✨ _Generated with Advanced AI_`, 
-                    parse_mode: "Markdown",
-                    ...Markup.inlineKeyboard([
-                        [
-                            Markup.button.callback("🔄 Regenerate", `regenerate:${prompt}:${style}`),
-                            Markup.button.callback("✨ Enhance", `enhance:${prompt}:${style}`)
-                        ],
-                        [
-                            Markup.button.callback("🎨 Change Style", `styles:${prompt}`)
-                        ]
-                    ])
-                }
-            );
-        } else {
-            ctx.replyWithMarkdown("❌ *Image regeneration failed!*\nPlease try again later.");
-        }
-    } 
-    else if (data.startsWith('enhance:')) {
-        const [_, prompt, style] = data.split(':');
-        const enhancedPrompt = prompt + ", enhanced details, higher quality, improved lighting";
-        
-        await ctx.answerCbQuery("Enhancing your image...");
-        
-        // Delete original message
-        await ctx.deleteMessage();
-        
-        // Send waiting message
-        const waitingMsg = await ctx.replyWithMarkdown(
-            "🎨 *Enhancing Image*\n\n" +
-            `🔄 Processing enhancement...\n` +
-            `🖌️ Style: *${style}*\n` +
-            `⏳ Adding extra details and quality...\n\n` +
-            `_This may take a few moments_`
-        );
-        
-        const imageBuffer = await generateImage(enhancedPrompt, style);
-        
-        // Delete waiting message
-        ctx.deleteMessage(waitingMsg.message_id);
-        
-        if (imageBuffer) {
-            ctx.replyWithPhoto(
-                { source: imageBuffer }, 
-                { 
-                    caption: `🖼 *Your Enhanced Masterpiece!*\n\n🔍 Original Prompt: "${prompt}"\n🖌️ Style: *${style}*\n✨ *Quality: Enhanced*\n\n✨ _Generated with Advanced AI_`, 
-                    parse_mode: "Markdown",
-                    ...Markup.inlineKeyboard([
-                        [
-                            Markup.button.callback("🔄 Regenerate", `regenerate:${prompt}:${style}`),
-                            Markup.button.callback("✨ Super Enhance", `enhance:${enhancedPrompt}:${style}`)
-                        ],
-                        [
-                            Markup.button.callback("🎨 Change Style", `styles:${prompt}`)
-                        ]
-                    ])
-                }
-            );
-        } else {
-            ctx.replyWithMarkdown("❌ *Image enhancement failed!*\nPlease try again later.");
-        }
-    }
-    else if (data.startsWith('styles:')) {
-        const [_, prompt] = data.split(':');
-        
-        // Create style selection keyboard
-        const styleKeyboard = [];
-        const styleNames = Object.keys(imageStyles);
-        
-        // Create rows with 2 styles per row
-        for (let i = 0; i < styleNames.length; i += 2) {
-            const row = [];
-            row.push(Markup.button.callback(styleNames[i], `style:${prompt}:${styleNames[i]}`));
-            
-            if (i + 1 < styleNames.length) {
-                row.push(Markup.button.callback(styleNames[i+1], `style:${prompt}:${styleNames[i+1]}`));
-            }
-            
-            styleKeyboard.push(row);
-        }
-        
-        await ctx.answerCbQuery();
-        await ctx.replyWithMarkdown(
-            "🎨 *Select Image Style*\n\n" +
-            "Choose a style for your image:",
-            Markup.inlineKeyboard(styleKeyboard)
-        );
-    }
-    else if (data.startsWith('style:')) {
-        const [_, prompt, style] = data.split(':');
-        
-        await ctx.answerCbQuery(`Generating ${style} style image...`);
-        
-        // Send waiting message
-        const waitingMsg = await ctx.replyWithMarkdown(
-            "🎨 *Generating Styled Image*\n\n" +
-            `🔄 Processing your request...\n` +
-            `🖌️ Style: *${style}*\n` +
-            `⏳ Creating artistic masterpiece...\n\n` +
-            `_This may take a few moments_`
-        );
-        
-        const imageBuffer = await generateImage(prompt, style);
-        
-        // Delete waiting message
-        ctx.deleteMessage(waitingMsg.message_id);
-        
-        if (imageBuffer) {
-            ctx.replyWithPhoto(
-                { source: imageBuffer }, 
-                { 
-                    caption: `🖼 *Your ${style.toUpperCase()} Style Masterpiece!*\n\n🔍 Prompt: "${prompt}"\n🖌️ Style: *${style}*\n\n✨ _Generated with Advanced AI_`, 
-                    parse_mode: "Markdown",
-                    ...Markup.inlineKeyboard([
-                        [
-                            Markup.button.callback("🔄 Regenerate", `regenerate:${prompt}:${style}`),
-                            Markup.button.callback("✨ Enhance", `enhance:${prompt}:${style}`)
-                        ],
-                        [
-                            Markup.button.callback("🎨 Change Style", `styles:${prompt}`)
-                        ]
-                    ])
-                }
-            );
-        } else {
-            ctx.replyWithMarkdown("❌ *Image generation failed!*\nPlease try again later.");
-        }
-    }
+// Error handling
+bot.catch((err, ctx) => {
+    console.error('Bot error:', err);
+    ctx.reply("⚠️ An error occurred. Please try again later.");
 });
 
-// Start command for new users
-bot.command('start', (ctx) => {
-    const userId = ctx.from.id;
-    
-    // Keep user active
-    keepUserActive(userId);
-    
-    ctx.replyWithMarkdown(
-        "🎨 *Welcome to Advanced AI Image Generator!*\n\n" +
-        "Generate beautiful AI images with a simple command:\n" +
-        "`/generate your image description`\n\n" +
-        "Add style by using:\n" +
-        "`/generate your description --style=anime`\n\n" +
-        "Available styles:\n" +
-        "• realistic (default)\n" +
-        "• anime\n" +
-        "• cartoon\n" +
-        "• oil\n" +
-        "• watercolor\n" +
-        "• sketch\n" +
-        "• cyberpunk\n" +
-        "• fantasy\n" +
-        "• vintage\n" +
-        "• 3d\n\n" +
-        "Example: `/generate sunset over mountains --style=oil`\n\n" +
-        "✨ Be creative and enjoy!"
-    );
+// Start the bot with error handling
+bot.launch().catch(err => {
+    console.error('Failed to start bot:', err);
 });
 
-// Help command
-bot.command('help', (ctx) => {
-    const userId = ctx.from.id;
-    
-    // Keep user active
-    keepUserActive(userId);
-    
-    ctx.replyWithMarkdown(
-        "🔍 *AI Image Generator Help*\n\n" +
-        "Basic Commands:\n" +
-        "• `/generate [description]` - Create an image\n" +
-        "• `/generate [description] --style=anime` - Create with style\n" +
-        "• `/styles` - View all available styles\n\n" +
-        "Tips for better results:\n" +
-        "• Be specific in your descriptions\n" +
-        "• Try different styles for variety\n" +
-        "• Mention colors, lighting, and mood\n" +
-        "• Use the enhance button for better quality\n\n" +
-        "Example: `/generate a futuristic city at night with neon lights --style=cyberpunk`"
-    );
-});
-
-// Styles command to show available styles
-bot.command('styles', (ctx) => {
-    const userId = ctx.from.id;
-    
-    // Keep user active
-    keepUserActive(userId);
-    
-    let styleMessage = "🎨 *Available Image Styles*\n\n";
-    
-    Object.keys(imageStyles).forEach(style => {
-        styleMessage += `• *${style}*: ${imageStyles[style].split(',')[1]}\n`;
-    });
-    
-    styleMessage += "\nUse with: `/generate [description] --style=stylename`";
-    
-    ctx.replyWithMarkdown(styleMessage);
-});
-
-// Heartbeat mechanism to keep users active
-bot.on('message', (ctx) => {
-    const userId = ctx.from.id;
-    keepUserActive(userId);
-});
-
-// Launch bot
-bot.launch();
-
-// Enable graceful stop
+// Graceful shutdown
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
 
-// **🚀 Express Server Start (Optional)**
-const PORT = 3000;
-app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
+// Enhanced Express server
+const PORT = process.env.PORT || 3000;
+app.get('/health', (req, res) => {
+    res.json({ status: 'healthy', uptime: process.uptime() });
+});
+
+app.listen(PORT, () => console.log(`🚀 Server running on http://localhost:${PORT}`));
