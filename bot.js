@@ -1,156 +1,130 @@
-const { Telegraf } = require("telegraf");
-const fetch = require("node-fetch");
-const fs = require("fs");
-const { createCanvas, loadImage } = require("canvas");
 
-// **🚀 Telegram Bot Setup**
-const BOT_TOKEN = "7813374449:AAENBb8BN8_oD2QOSP31tKO6WjpS4f0Dt4g"; // Replace with your actual bot token
+
+const { Telegraf, Markup } = require('telegraf');
+const axios = require('axios');
+
+// Replace with your Telegram bot token
+const BOT_TOKEN = '7813374449:AAENBb8BN8_oD2QOSP31tKO6WjpS4f0Dt4g';
 const bot = new Telegraf(BOT_TOKEN);
 
-// **🤖 Image Generation Function**
-async function generateImage(prompt, enhanceType = "realistic") {
+// Image generation function
+async function generateImage(prompt, style = '') {
     try {
-        // **✨ Enhanced Prompt Tuning**
-        let tuningText = ", ultra high resolution, 4K";
-        switch (enhanceType) {
-            case "realistic":
-                tuningText += ", realistic, professional lighting, cinematic";
-                break;
-            case "cartoon":
-                tuningText += ", cartoonish, vibrant colors, detailed";
-                break;
-            case "anime":
-                tuningText += ", anime style, detailed eyes, trending on artstation";
-                break;
-            default:
-                tuningText += ", artistic, creative, unique";
-        }
+        const tuningText = ", ultra high resolution, 4K, realistic, professional lighting, cinematic";
         prompt += tuningText;
 
-        // ✅ **Pollinations AI Image API**
-        const response = await fetch(`https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?w=1024&h=1024`);
-        if (!response.ok) throw new Error("Failed to fetch image from AI!");
+        if (style) {
+            prompt += `, ${style}`; // Append style to the prompt
+        }
 
-        const imageUrl = response.url;
-        const imageBuffer = await fetch(imageUrl).then(res => res.buffer());
+        const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?w=1024&h=1024`;
+        const response = await axios.get(imageUrl, { responseType: 'stream' });
 
-        // ✅ **Watermark Removal (Cropping)**
-        const img = await loadImage(imageBuffer);
-        const cropHeight = 850;
-        const canvas = createCanvas(img.width, cropHeight);
-        const ctx = canvas.getContext("2d");
-        ctx.drawImage(img, 0, 0, img.width, cropHeight, 0, 0, img.width, cropHeight);
-        const finalBuffer = canvas.toBuffer("image/png");
-
-        return finalBuffer;
-
+        if (response.status === 200) {
+            return response.data; // Return the image stream
+        } else {
+            console.error("Image generation failed:", response.status, response.statusText);
+            return null;
+        }
     } catch (error) {
-        console.error("❌ Image Generation Error:", error);
-        throw new Error("Image generation failed!");
+        console.error("Error generating image:", error);
+        return null;
     }
 }
 
-// **Handler for /image command**
-bot.command("image", async (ctx) => {
-    const prompt = ctx.message.text.substring(7).trim(); // Extract prompt from command
+// Command handler for generating images
+bot.command('imagine', async (ctx) => {
+    const prompt = ctx.message.text.substring('/imagine'.length).trim();
+
     if (!prompt) {
-        return ctx.reply("Please provide a prompt. Example: /image cat in space");
+        return ctx.reply('Please provide a prompt. For example: /imagine A cat in space');
     }
 
-    try {
-        // **⏳ Send "Waiting" Message**
-        ctx.reply("Generating image, please wait...").then((msg) => {
-            // **🖼️ Generate Image with Default Settings**
-            generateImage(prompt)
-                .then(imageBuffer => {
-                    // **✅ Send Image to Telegram**
-                    ctx.replyWithPhoto({ source: imageBuffer }).then(() => {
-                        // **🗑️ Delete "Waiting" Message**
-                        bot.telegram.deleteMessage(ctx.chat.id, msg.message_id);
-                    });
-                })
-                .catch(error => {
-                    console.error("❌ Error:", error);
-                    ctx.reply("Failed to generate image.");
-                    bot.telegram.deleteMessage(ctx.chat.id, msg.message_id);
-                });
-        });
-    } catch (error) {
-        console.error("❌ Error:", error);
-        ctx.reply("Failed to generate image.");
+    ctx.reply('Generating image, please wait...');
+
+    const imageStream = await generateImage(prompt);
+
+    if (imageStream) {
+        try {
+            await ctx.replyWithPhoto({ source: imageStream }, {
+                caption: prompt
+            });
+        } catch (error) {
+            console.error("Error sending image:", error);
+            ctx.reply('Failed to send the generated image.');
+        }
+    } else {
+        ctx.reply('Failed to generate the image.');
     }
 });
 
-// **🚀 Inline Query for Image Generation with Options**
-bot.on("inline_query", async (ctx) => {
-    const query = ctx.inlineQuery.query.trim();
+// Inline keyboard for style options
+const styleOptions = Markup.inlineKeyboard([
+    Markup.button.callback('Realistic', 'style_realistic'),
+    Markup.button.callback('Cartoon', 'style_cartoon'),
+    Markup.button.callback('Anime', 'style_anime'),
+    Markup.button.callback('Abstract', 'style_abstract'),
+    Markup.button.callback('Pencil Sketch', 'style_pencil'),
+    Markup.button.callback('Oil Painting', 'style_oil'),
+    Markup.button.callback('Cyberpunk', 'style_cyberpunk'),
+    Markup.button.callback('Steampunk', 'style_steampunk'),
+    Markup.button.callback('Watercolor', 'style_watercolor'),
+    Markup.button.callback('Photorealistic', 'style_photorealistic')
+], { columns: 3 });
 
-    if (!query) {
-        return ctx.answerInlineQuery([]); // Empty result if no query
+// Command handler for choosing a style
+bot.command('style', async (ctx) => {
+    ctx.reply('Choose a style:', styleOptions);
+});
+
+// Callback query handler for style selection
+bot.action(/^style_/, async (ctx) => {
+    const style = ctx.callbackQuery.data.substring(6); // Extract style name
+    ctx.session.style = style; // Store style in session
+    ctx.answerCbQuery(`Style set to ${style}`);
+    ctx.reply(`Style set to ${style}. Now use /imagine with your prompt.`);
+});
+
+// Example usage with style
+bot.command('imagine_styled', async (ctx) => {
+    const prompt = ctx.message.text.substring('/imagine_styled'.length).trim();
+
+    if (!prompt) {
+        return ctx.reply('Please provide a prompt. For example: /imagine_styled A cat');
     }
 
-    const imageStyles = [
-        { type: "realistic", label: "Realistic" },
-        { type: "cartoon", label: "Cartoon" },
-        { type: "anime", label: "Anime" },
-        { type: "artistic", label: "Artistic" },
-    ];
+    if (!ctx.session || !ctx.session.style) {
+        return ctx.reply('Please select a style first using /style');
+    }
 
-    const results = await Promise.all(
-        imageStyles.map(async (style) => {
-            try {
-                const imageBuffer = await generateImage(query, style.type);
-                const photo = {
-                    type: "photo",
-                    id: style.type,
-                    photo: { source: imageBuffer },
-                    title: `Generate ${style.label} Image`,
-                    caption: `Prompt: ${query} - Style: ${style.label}`,
-                };
-                return photo;
-            } catch (error) {
-                console.error(`❌ Error generating ${style.label} image:`, error);
-                return null; // Handle errors gracefully
-            }
-        })
-    );
+    ctx.reply('Generating styled image, please wait...');
 
-    const validResults = results.filter(result => result !== null); // Filter out any failed results
+    const imageStream = await generateImage(prompt, ctx.session.style);
 
-    return ctx.answerInlineQuery(validResults, {
-        cache_time: 0, // Disable cache for dynamic results
-    });
+    if (imageStream) {
+        try {
+            await ctx.replyWithPhoto({ source: imageStream }, {
+                caption: `${prompt} - Style: ${ctx.session.style}`
+            });
+        } catch (error) {
+            console.error("Error sending image:", error);
+            ctx.reply('Failed to send the generated image.');
+        }
+    } else {
+        ctx.reply('Failed to generate the image.');
+    }
 });
 
-// **✨ Additional Features (Example)**
-bot.help((ctx) => {
-    ctx.reply(`
-Available commands:
-/image [prompt] - Generates an image based on the prompt.
-You can also use inline queries: type @[bot_name] [prompt] to generate images with different styles.
-`);
-});
+// Keep-alive mechanism (basic, needs improvement)
+setInterval(() => {
+    // You can send a message to a specific chat to keep the bot active
+    // bot.telegram.sendMessage(YOUR_CHAT_ID, 'Bot is alive!');
+    console.log('Bot is alive!'); // Simple logging
+}, 25 * 60 * 1000); // Every 25 minutes
 
-// **🛡️ Error Handling**
-bot.catch((err, ctx) => {
-    console.error("❌ Bot Error:", err);
-    ctx.reply("An error occurred. Please try again later.");
-});
-
-// **🚀 Launch the Bot**
+// Launch the bot
 bot.launch();
 
-// **Graceful Shutdown**
-process.on("SIGINT", () => {
-    bot.stop("SIGINT");
-    process.exit(0);
-});
-
-// **Bypass Inactivity Shutdown (using setInterval)**
-setInterval(() => {
-    // You can add code here to perform a simple task,
-    // like logging a message or sending a ping to the bot,
-    // to keep it active and prevent it from being shut down
-    // due to inactivity.
-    console.log("Bot is still active...");
-}, 30 * 60 * 100); // Every 20 minutes
+// Enable graceful stop
+process.once('SIGINT', () => bot.stop('SIGINT'));
+process.once('SIGTERM', () => bot.stop('SIGTERM'));
