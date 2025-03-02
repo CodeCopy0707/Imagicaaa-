@@ -4,7 +4,7 @@ const fs = require("fs");
 const { createCanvas, loadImage } = require("canvas");
 
 // **🚀 Telegram Bot Setup**
-const BOT_TOKEN = process.env.BOT_TOKEN || "YOUR_BOT_TOKEN"; // Replace with your actual bot token
+const BOT_TOKEN = "7813374449:AAENBb8BN8_oD2QOSP31tKO6WjpS4f0Dt4g"; // Replace with your actual bot token
 const bot = new Telegraf(BOT_TOKEN);
 
 // **🤖 Image Generation Function**
