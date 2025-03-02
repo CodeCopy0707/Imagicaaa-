@@ -192,65 +192,80 @@ bot.settings((ctx) => {
 
 bot.command('generate', async (ctx) => {
     // Prompt the user for input in the chat
-    await ctx.reply('Please enter your image prompt:');
+    ctx.reply('Please enter your image prompt:');
 
-    // Set up a listener for the next message from the user
-    bot.on('text', async (ctx) => {
-        const prompt = ctx.message.text;
-
-        // Remove the listener to prevent multiple triggers
-        bot.removeListener('text', arguments.callee);
-
-        if (!prompt) {
-            return ctx.reply(
-                '⚠️ Please provide a prompt.\n' +
-                'Example: a beautiful sunset over mountains'
-            );
-        }
-
-        // Ask for image quality
-        await ctx.reply('Please enter the desired image width (e.g., 1024):');
-
-        bot.on('text', async (ctx) => {
-            const width = parseInt(ctx.message.text);
-            bot.removeListener('text', arguments.callee);
-
-            if (isNaN(width) || width <= 0) {
-                return ctx.reply('Invalid width. Using default width 2048.');
-            }
-
-            await ctx.reply('Please enter the desired image height (e.g., 1024):');
-
-            bot.on('text', async (ctx) => {
-                const height = parseInt(ctx.message.text);
-                bot.removeListener('text', arguments.callee);
-
-                if (isNaN(height) || height <= 0) {
-                    return ctx.reply('Invalid height. Using default height 2048.');
-                }
-
-                const imageBuffer = await generateImage(prompt, ctx, 'hyperrealistic', width, height);
-                if (imageBuffer) {
-                    const img = await loadImage(imageBuffer);
-                    const canvas = createCanvas(img.width, Math.floor(img.height * 0.95)); // Crop 5% from bottom
-                    const ctx2d = canvas.getContext("2d");
-                    ctx2d.drawImage(img, 0, 0, img.width, img.height, 0, 0, canvas.width, canvas.height);
-                    const croppedImageBuffer = canvas.toBuffer("image/png");
-
-                    await ctx.replyWithPhoto(
-                        { source: croppedImageBuffer },
-                        {
-                            caption: "🎨 Here's your AI masterpiece!\n" +
-                                "Prompt: " + prompt + "\n\n" +
-                                "Use /generate to create another image!"
-                        }
-                    );
-                } else {
-                    await ctx.reply("❌ Image generation failed! Please try again.");
-                }
+    // Use a promise to handle the asynchronous nature of getting user input
+    const getPrompt = () => {
+        return new Promise((resolve) => {
+            bot.on('text', (msg) => {
+                bot.removeListener('text', arguments.callee); // Remove listener after first response
+                resolve(msg.message.text);
             });
         });
-    });
+    };
+
+    const prompt = await getPrompt();
+
+    if (!prompt) {
+        return ctx.reply(
+            '⚠️ Please provide a prompt.\n' +
+            'Example: a beautiful sunset over mountains'
+        );
+    }
+
+    ctx.reply('Please enter the desired image width (e.g., 1024):');
+
+    const getWidth = () => {
+        return new Promise((resolve) => {
+            bot.on('text', (msg) => {
+                bot.removeListener('text', arguments.callee);
+                resolve(parseInt(msg.message.text));
+            });
+        });
+    };
+
+    const width = await getWidth();
+
+    if (isNaN(width) || width <= 0) {
+        ctx.reply('Invalid width. Using default width 2048.');
+    }
+
+    ctx.reply('Please enter the desired image height (e.g., 1024):');
+
+    const getHeight = () => {
+        return new Promise((resolve) => {
+            bot.on('text', (msg) => {
+                bot.removeListener('text', arguments.callee);
+                resolve(parseInt(msg.message.text));
+            });
+        });
+    };
+
+    const height = await getHeight();
+
+    if (isNaN(height) || height <= 0) {
+        return ctx.reply('Invalid height. Using default height 2048.');
+    }
+
+    const imageBuffer = await generateImage(prompt, ctx, 'hyperrealistic', width, height);
+    if (imageBuffer) {
+        const img = await loadImage(imageBuffer);
+        const canvas = createCanvas(img.width, Math.floor(img.height * 0.95)); // Crop 5% from bottom
+        const ctx2d = canvas.getContext("2d");
+        ctx2d.drawImage(img, 0, 0, img.width, img.height, 0, 0, canvas.width, canvas.height);
+        const croppedImageBuffer = canvas.toBuffer("image/png");
+
+        await ctx.replyWithPhoto(
+            { source: croppedImageBuffer },
+            {
+                caption: "🎨 Here's your AI masterpiece!\n" +
+                    "Prompt: " + prompt + "\n\n" +
+                    "Use /generate to create another image!"
+            }
+        );
+    } else {
+        await ctx.reply("❌ Image generation failed! Please try again.");
+    }
 });
 
 bot.command('enhance', async (ctx) => {
