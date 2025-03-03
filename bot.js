@@ -656,7 +656,7 @@ function pingSelf() {
 }
 
 // Set up the ping interval
-setInterval(pingSelf, 15 * 60 * 1000);  // Every 15 minutes
+setInterval(pingSelf, 45000);  // Every 15 minutes
 
 // Run the ping immediately when the bot starts.
 pingSelf();
