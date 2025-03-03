@@ -580,19 +580,20 @@ function generateImageUrl(prompt, width = 1024, height = 1024) {
 }
 
 /**
- * Fetch with retry logic
+ * Fetch with retry logic and increased timeout
  * @param {string} url - URL to fetch
  * @param {number} maxRetries - Maximum number of retries
- * @param {number} delay - Delay between retries in ms
+ * @param {number} delay - Delay between retries in ms, increases exponentially
  * @returns {Promise<Response>} - Fetch response
  */
-async function fetchWithRetry(url, maxRetries = 3, delay = 1000) {
+async function fetchWithRetry(url, maxRetries = 5, delay = 1000) {
   let lastError;
 
   for (let i = 0; i < maxRetries; i++) {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+      // Increased timeout to 45 seconds to avoid premature timeouts
+      const timeoutId = setTimeout(() => controller.abort(), 45000);
 
       const response = await fetch(url, {
         signal: controller.signal,
@@ -603,19 +604,27 @@ async function fetchWithRetry(url, maxRetries = 3, delay = 1000) {
       });
 
       clearTimeout(timeoutId);
-      return response;
+      if (response.ok) {
+          return response;
+      } else {
+          throw new Error(`HTTP Error: ${response.status}`);
+      }
+
     } catch (error) {
       console.error(`Fetch attempt ${i + 1} failed:`, error.message);
       lastError = error;
 
+      // Exponential backoff with a maximum delay
+      const backoffDelay = Math.min(delay * (2 ** i), 60000); // Max delay of 60 seconds
+
       if (i < maxRetries - 1) {
         // Wait before retrying
-        await new Promise(resolve => setTimeout(resolve, delay * (i + 1)));
+        await new Promise(resolve => setTimeout(resolve, backoffDelay));
       }
     }
   }
 
-  throw lastError;
+  throw lastError; // Throw the last error if all retries fail
 }
 
 console.log('🤖 Advanced Telegram AI Image Bot is running...');
@@ -626,37 +635,48 @@ process.on('unhandledRejection', (error) => {
   // Don't crash the application
 });
 
-//  ---  ADDED CODE BELOW  ---
+// --- Keep-Alive Mechanism for Render ---
 
-// Simple HTTP server to keep Render awake
+// Import the 'http' module
 import http from 'http';
 
-const PORT = process.env.PORT || 3000;  // Use Render's port or 3000
+// Set the port for the keep-alive server, defaulting to 3000 if not specified
+const PORT = process.env.PORT || 3000;
 
+// Create a simple HTTP server to respond to keep-alive requests
 const server = http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': 'text/plain' });
   res.end('Telegram bot is alive!\n');
 });
 
+// Start the server and listen on the specified port
 server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`Keep-alive server running on port ${PORT}`);
 });
 
-// Function to ping the server every 15 minutes (adjust as needed)
+// Function to ping the Render service to prevent it from going to sleep
 function pingSelf() {
-  const url = 'https://imagicaaa.onrender.com';  // Render's external URL
+  // Use the Render external URL environment variable
+  const url = 'https://imagicaaa.onrender.com';
 
   if (url) {
+    // Make a request to the Render service
     fetch(url)
-      .then(() => console.log('Successfully pinged self'))
+      .then(response => {
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        console.log('Successfully pinged self');
+      })
       .catch(err => console.error('Failed to ping self:', err));
   } else {
     console.log('RENDER_EXTERNAL_URL not set, skipping self-ping');
   }
 }
 
-// Set up the ping interval
-setInterval(pingSelf, 45000);  // Every 15 minutes
+// Set up an interval to ping the service every 40 seconds (40000 milliseconds)
+// Render spins down after 15 minutes (900,000 ms) of inactivity, so ping more frequently.
+setInterval(pingSelf, 40000);
 
-// Run the ping immediately when the bot starts.
+// Initial ping to start the keep-alive process immediately
 pingSelf();
