@@ -1,5 +1,5 @@
 import TelegramBot from 'node-telegram-bot-api';
-import fetch from 'node-fetch';
+import axios from 'axios';
 import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
@@ -20,6 +20,7 @@ if (!fs.existsSync(tempDir)) {
 
 // Bot token from environment variables
 const BOT_TOKEN = '7813374449:AAENBb8BN8_oD2QOSP31tKO6WjpS4f0Dt4g'; // Replace with your actual token
+const GEMINI_API_KEY = 'AIzaSyDc7u7wTVdDG3zP18xnELKs0HX7-hImkmc';
 
 // Configure bot options with increased timeout and polling options
 const botOptions = {
@@ -69,7 +70,7 @@ bot.onText(/\/start/, (msg) => {
   userStates[chatId] = {
     lastCommand: 'start',
     style: 'realistic',
-    resolution: '1024x1024',
+    resolution: '1536x1536',
     waitingForPrompt: false
   };
 
@@ -186,7 +187,7 @@ Select one of the following resolutions:
 • 1024x1024 (medium)
 • 1536x1536 (large)
 
-*Current resolution:* ${userStates[chatId]?.resolution || '1024x1024'}
+*Current resolution:* ${userStates[chatId]?.resolution || '1536x1536'}
 
 Note: Larger resolutions may take longer to generate.
   `;
@@ -206,7 +207,7 @@ bot.onText(/\/settings/, (msg) => {
   if (!userStates[chatId]) {
     userStates[chatId] = {
       style: 'realistic',
-      resolution: '1024x1024',
+      resolution: '1536x1536',
       lastCommand: '',
       waitingForPrompt: false
     };
@@ -216,7 +217,7 @@ bot.onText(/\/settings/, (msg) => {
 *Your Current Settings* ⚙️
 
 • *Style:* ${userStates[chatId].style || 'realistic'}
-• *Resolution:* ${userStates[chatId].resolution || '1024x1024'}
+• *Resolution:* ${userStates[chatId].resolution || '1536x1536'}
 
 Use /style to change the art style
 Use /resolution to change the image size
@@ -264,36 +265,38 @@ bot.onText(/\/random/, async (msg) => {
     waitingForPrompt: false
   };
 
-  const randomPrompts = [
-    "a magical forest with glowing mushrooms and fairy lights",
-    "a futuristic cityscape with flying cars and neon signs",
-    "a majestic dragon soaring over a mountain range",
-    "an underwater city with mermaids and exotic sea creatures",
-    "a steampunk airship flying through clouds at sunset",
-    "a cozy cabin in the woods during a snowfall",
-    "a space station orbiting a colorful nebula",
-    "a cyberpunk street scene with rain and reflections",
-    "a fantasy castle on a floating island in the sky",
-    "a post-apocalyptic landscape with nature reclaiming a city"
-  ];
-
+  // Get random style
   const randomStyles = Object.keys(imageStyles);
-  const randomPrompt = randomPrompts[Math.floor(Math.random() * randomPrompts.length)];
   const randomStyle = randomStyles[Math.floor(Math.random() * randomStyles.length)];
+    userStates[chatId].style = randomStyle;
 
-  // Update user's style temporarily for this generation
-  const previousStyle = userStates[chatId]?.style || 'realistic';
-  userStates[chatId].style = randomStyle;
+  try {
+    const geminiPrompt = "Generate a creative and descriptive prompt for an image. It should be suitable for an image generation AI. Be unexpected.";
+    const geminiResponse = await axios.post(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        contents: [{ parts: [{ text: geminiPrompt }]}],
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }
+    );
 
-  await bot.sendMessage(chatId, `🎲 *Generating a random image*\n\n*Prompt:* ${randomPrompt}\n*Style:* ${randomStyle}`, {
-    parse_mode: 'Markdown'
-  });
+    const generatedPrompt = geminiResponse.data.candidates[0].content.parts[0].text;
 
-  // Generate the image
-  await generateAndSendImage(chatId, randomPrompt);
+    await bot.sendMessage(chatId, `🎲 *Generating a random image*\n\n*Prompt:* ${generatedPrompt}\n*Style:* ${randomStyle}`, {
+      parse_mode: 'Markdown'
+    });
 
-  // Restore previous style
-  userStates[chatId].style = previousStyle;
+    // Generate the image
+    await generateAndSendImage(chatId, generatedPrompt);
+
+  } catch (error) {
+    console.error('Error generating random prompt with Gemini:', error.message);
+    await bot.sendMessage(chatId, '❌ Sorry, there was an error generating a random image. Please try again later.');
+  }
 });
 
 // Generate image command
@@ -321,7 +324,7 @@ bot.on('message', async (msg) => {
   if (!userStates[chatId]) {
     userStates[chatId] = {
       style: 'realistic',
-      resolution: '1024x1024',
+      resolution: '1536x1536',
       lastCommand: '',
       waitingForPrompt: false
     };
@@ -434,7 +437,7 @@ async function generateAndSendImage(chatId, prompt) {
     if (!userStates[chatId]) {
       userStates[chatId] = {
         style: 'realistic',
-        resolution: '1024x1024',
+        resolution: '1536x1536',
         lastCommand: '',
         waitingForPrompt: false
       };
@@ -442,7 +445,7 @@ async function generateAndSendImage(chatId, prompt) {
 
     // Get user's style and resolution
     const style = userStates[chatId].style || 'realistic';
-    const resolution = userStates[chatId].resolution || '1024x1024';
+    const resolution = userStates[chatId].resolution || '1536x1536';
     const [width, height] = resolution.split('x').map(Number);
 
     // Send "generating" message
@@ -569,7 +572,7 @@ bot.on('message', (msg) => {
  * @param {number} height - Image height
  * @returns {string|null} - The image URL or null if failed
  */
-function generateImageUrl(prompt, width = 1024, height = 1024) {
+function generateImageUrl(prompt, width = 1536, height = 1536) {
   try {
     // Using Pollinations.ai API
     return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=${width}&height=${height}&noCache=${Date.now()}`;
@@ -592,7 +595,7 @@ async function fetchWithRetry(url, maxRetries = 5, delay = 1000) {
   for (let i = 0; i < maxRetries; i++) {
     try {
       const controller = new AbortController();
-      // Increased timeout to 45 seconds to avoid premature timeouts
+      // Increased timeout to 45 seconds
       const timeoutId = setTimeout(() => controller.abort(), 45000);
 
       const response = await fetch(url, {
@@ -605,11 +608,10 @@ async function fetchWithRetry(url, maxRetries = 5, delay = 1000) {
 
       clearTimeout(timeoutId);
       if (response.ok) {
-          return response;
+        return response;
       } else {
-          throw new Error(`HTTP Error: ${response.status}`);
+        throw new Error(`HTTP Error: ${response.status}`);
       }
-
     } catch (error) {
       console.error(`Fetch attempt ${i + 1} failed:`, error.message);
       lastError = error;
