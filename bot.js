@@ -659,7 +659,7 @@ server.listen(PORT, () => {
 // Function to ping the Render service to prevent it from going to sleep
 function pingSelf() {
   // Use the Render external URL environment variable
-  const url = 'https://imagicaaa.onrender.com';
+  const url = 'https://imagicaaa-xbga.onrender.com';
 
   if (url) {
     // Make a request to the Render service
